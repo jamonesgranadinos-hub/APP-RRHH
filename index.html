@@ -188,6 +188,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 @keyframes carga{from{left:-40%}to{left:100%}}
 .cargando main{pointer-events:none;opacity:.7}
 .espera{text-align:center;padding:80px 0;color:var(--pizarra)}
+.version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
 
@@ -207,6 +208,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
+<p class="version">Versión 2026-11-11 c</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
