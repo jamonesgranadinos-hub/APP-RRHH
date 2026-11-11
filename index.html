@@ -193,6 +193,8 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 @keyframes carga{from{left:-40%}to{left:100%}}
 .cargando main{pointer-events:none;opacity:.7}
 .espera{text-align:center;padding:80px 0;color:var(--pizarra)}
+.recordar{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:16px}
+.recordar input{width:22px;height:22px;accent-color:var(--pino);margin:0}
 .version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
@@ -213,7 +215,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-11 e</p>
+<p class="version">Versión 2026-11-11 f</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -354,9 +356,10 @@ function vAcceso(){
       <button type="button" data-a="modo" data-v="emp" aria-pressed="${!admin}">Empleado</button>
       <button type="button" data-a="modo" data-v="admin" aria-pressed="${admin}">Administrador</button>
     </div>
-    <form data-f="entrar" autocomplete="off">
-      <label class="campo"><span>${admin?"Usuario":"DNI o NIE"}</span><input type="text" name="u" required ${admin?"":'placeholder="12345678Z"'} autocapitalize="characters"></label>
-      <label class="campo"><span>PIN</span><input type="password" name="p" inputmode="numeric" maxlength="8" required></label>
+    <form data-f="entrar">
+      <label class="campo"><span>${admin?"Usuario":"DNI o NIE"}</span><input type="text" name="u" required ${admin?"":'placeholder="12345678Z"'} autocapitalize="characters" autocomplete="username"></label>
+      <label class="campo"><span>PIN</span><input type="password" name="p" inputmode="numeric" maxlength="8" required autocomplete="current-password"></label>
+      <label class="recordar"><input type="checkbox" name="recordar" checked> <span>Recordarme en este móvil</span></label>
       <div id="errAcceso"></div>
       <button class="btn">Entrar</button>
     </form>
@@ -629,8 +632,8 @@ function vCambiarPin(){
     <h1>Elige tu PIN</h1>
     <p class="muted">Es tu primera vez en la app. Elige un PIN de 4 a 8 cifras que solo sepas tú; lo usarás cada vez que entres.</p>
     <form data-f="nuevoPin" autocomplete="off">
-      <label class="campo"><span>Tu PIN nuevo</span><input type="password" name="p1" inputmode="numeric" pattern="[0-9]*" maxlength="8" required></label>
-      <label class="campo"><span>Repítelo</span><input type="password" name="p2" inputmode="numeric" pattern="[0-9]*" maxlength="8" required></label>
+      <label class="campo"><span>Tu PIN nuevo</span><input type="password" name="p1" inputmode="numeric" pattern="[0-9]*" maxlength="8" required autocomplete="new-password"></label>
+      <label class="campo"><span>Repítelo</span><input type="password" name="p2" inputmode="numeric" pattern="[0-9]*" maxlength="8" required autocomplete="new-password"></label>
       <div id="errPin"></div>
       <button class="btn">Guardar mi PIN</button>
     </form></div>`;
@@ -751,7 +754,7 @@ document.addEventListener("click", ev=>{
   const nom = eid => (emp(eid)?.nombre||"").split(" ")[0];
   switch(a){
     case "modo": vista.modo=b.dataset.v; render(); break;
-    case "salir": document.getElementById("toast").classList.remove("ver"); cerrarSesion(); break;
+    case "salir": document.getElementById("toast").classList.remove("ver"); if(vista.sesion?.token) fetch(API_URL,{method:"POST",body:JSON.stringify({accion:"salir",token:vista.sesion.token})}).catch(()=>{}); cerrarSesion(); break;
     case "resetPin": hacer("resetPin",{emp:id},`PIN restablecido a ${PIN_PROV}`); break;
     case "anio": vista.anio=+b.dataset.v; vista.mes=null; vista.sim={}; render(); break;
     case "pedirSalida": vista.confirmSalida=id; render(); break;
@@ -795,7 +798,7 @@ document.addEventListener("submit", async ev=>{
     const admin = vista.modo==="admin";
     if(!admin && !dniValido(d.u)){ err("errAcceso","Ese DNI o NIE no es válido. Revisa los números y la letra."); return; }
     try{
-      const j = await api("entrar",{modo:admin?"admin":"emp", usuario:d.u, pin:d.p});
+      const j = await api("entrar",{modo:admin?"admin":"emp", usuario:d.u, pin:d.p, recordar:d.recordar==="on"});
       vista.sesion = {rol:j.rol, token:j.token, cambiarPin:!!j.cambiarPin};
       if(j.rol==="emp"){ vista.sesion.id = null; }
       vista.tab="solicitudes"; vista.sim={}; vista.anio=null;

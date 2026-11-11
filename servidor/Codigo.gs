@@ -10,6 +10,7 @@ const CFG = {
   ANIO_INICIO: 2026,     // año en que se empieza a usar la app
   PIN_PROV: '1234',      // PIN provisional de los empleados nuevos
   HORAS_SESION: 6,       // tiempo que dura una sesión abierta
+  DIAS_RECORDAR: 90,     // con "Recordarme en este móvil": días sin volver a pedir el PIN (se renueva al usarla)
   INTENTOS: 5            // intentos fallidos de PIN antes de bloquear 15 minutos
 };
 
@@ -42,6 +43,7 @@ function salida_(o) {
 
 function despachar_(p) {
   if (p.accion === 'entrar') return entrar_(p);
+  if (p.accion === 'salir') { cerrarSesion_(p.token); return { ok: true }; }
   const ses = sesion_(p.token);
   if (!ses) return { ok: false, error: 'SESION', mensaje: 'La sesión ha caducado. Vuelve a entrar.' };
   const lock = LockService.getScriptLock();
@@ -75,13 +77,44 @@ function pinOk_(guardado, pin) {
 }
 function sesion_(token) {
   if (!token) return null;
-  const t = CacheService.getScriptCache().get('t:' + token);
-  return t ? JSON.parse(t) : null;
+  const cache = CacheService.getScriptCache();
+  const t = cache.get('t:' + token);
+  if (t) return JSON.parse(t);
+  // sesión recordada en el móvil
+  const pr = PropertiesService.getScriptProperties();
+  const g = pr.getProperty('s:' + token);
+  if (!g) return null;
+  const d = JSON.parse(g);
+  if (!(d.exp > Date.now())) { pr.deleteProperty('s:' + token); return null; }
+  d.exp = Date.now() + CFG.DIAS_RECORDAR * 86400000;
+  pr.setProperty('s:' + token, JSON.stringify(d));
+  const datos = { rol: d.rol, id: d.id };
+  cache.put('t:' + token, JSON.stringify(datos), CFG.HORAS_SESION * 3600);
+  return datos;
 }
-function abrirSesion_(datos) {
+function abrirSesion_(datos, recordar) {
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put('t:' + token, JSON.stringify(datos), CFG.HORAS_SESION * 3600);
+  if (recordar) {
+    const pr = PropertiesService.getScriptProperties();
+    limpiarSesiones_(pr, null);
+    pr.setProperty('s:' + token, JSON.stringify(Object.assign({ exp: Date.now() + CFG.DIAS_RECORDAR * 86400000 }, datos)));
+  }
   return token;
+}
+function cerrarSesion_(token) {
+  if (!token) return;
+  CacheService.getScriptCache().remove('t:' + token);
+  PropertiesService.getScriptProperties().deleteProperty('s:' + token);
+}
+/** Borra sesiones recordadas caducadas y, si se indica, todas las de un empleado (PIN restablecido o salida). */
+function limpiarSesiones_(pr, idEmpleado) {
+  const todo = pr.getProperties(), ahora = Date.now(), cache = CacheService.getScriptCache();
+  Object.keys(todo).forEach(k => {
+    if (k.indexOf('s:') !== 0) return;
+    let d; try { d = JSON.parse(todo[k]); } catch (e) { d = {}; }
+    if (!(d.exp > ahora) || (idEmpleado && d.id === idEmpleado)) { pr.deleteProperty(k); cache.remove('t:' + k.slice(2)); }
+  });
 }
 function normDni_(v) { return String(v || '').toUpperCase().replace(/[\s.-]/g, ''); }
 
@@ -97,7 +130,7 @@ function entrar_(p) {
     if (!h) return { ok: false, mensaje: 'Falta configurar el PIN del administrador. Hazlo desde la hoja: menú App RRHH > Cambiar PIN del administrador.' };
     if (String(p.usuario || '').trim().toLowerCase() !== 'admin' || hash_(p.pin) !== h) return fallo('Usuario o PIN incorrectos.');
     cache.remove(clave);
-    return { ok: true, token: abrirSesion_({ rol: 'admin' }), rol: 'admin' };
+    return { ok: true, token: abrirSesion_({ rol: 'admin' }, !!p.recordar), rol: 'admin' };
   }
 
   const dni = normDni_(p.usuario);
@@ -106,7 +139,7 @@ function entrar_(p) {
   if (!fila || !pinOk_(fila[3], p.pin)) return fallo('DNI o PIN incorrectos.');
   if (String(fila[5]).trim() === 'No') return { ok: false, mensaje: 'Este usuario ya no tiene acceso a la app.' };
   cache.remove(clave);
-  return { ok: true, token: abrirSesion_({ rol: 'emp', id: fila[0] }), rol: 'emp', cambiarPin: String(fila[4]).trim() !== 'Sí' };
+  return { ok: true, token: abrirSesion_({ rol: 'emp', id: fila[0] }, !!p.recordar), rol: 'emp', cambiarPin: String(fila[4]).trim() !== 'Sí' };
 }
 
 /* ================= Lectura de la hoja ================= */
@@ -324,9 +357,13 @@ const ADMIN_ = {
     t.hoja.appendRow([id, texto_(p.nombre, 120).toUpperCase(), dni, "'" + CFG.PIN_PROV, 'No', 'Sí', '', '', '']);
     return { id };
   },
-  resetPin(ses, p) { const r = buscar_(HOJA.emp, p.emp); r.hoja.getRange(r.f.fila, 4, 1, 2).setValues([["'" + CFG.PIN_PROV, 'No']]); },
+  resetPin(ses, p) {
+    const r = buscar_(HOJA.emp, p.emp); r.hoja.getRange(r.f.fila, 4, 1, 2).setValues([["'" + CFG.PIN_PROV, 'No']]);
+    limpiarSesiones_(PropertiesService.getScriptProperties(), p.emp);   // cierra sus sesiones recordadas
+  },
   salida(ses, p) {
     const fecha = fechaValida_(p.fecha), r = buscar_(HOJA.emp, p.emp);
+    limpiarSesiones_(PropertiesService.getScriptProperties(), p.emp);
     r.hoja.getRange(r.f.fila, 6).setValue('No'); r.hoja.getRange(r.f.fila, 8).setValue(fecha);
     // anula solicitudes pendientes y avisos posteriores a la salida
     const tv = tabla_(HOJA.vac); tv.filas.filter(f => f[2] === p.emp && f[9] === ESTADO.pendiente).map(f => f.fila).sort((a, b) => b - a).forEach(n => tv.hoja.deleteRow(n));
