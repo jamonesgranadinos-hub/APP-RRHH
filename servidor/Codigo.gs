@@ -158,7 +158,7 @@ function leerTodo_() {
     if (f[6] !== '' && f[6] != null) inicial[f[0]] = Number(f[6]);
   });
   const vac = tabla_(HOJA.vac).filas.map(f => {
-    const v = { id: String(f[0]), emp: f[2], desde: fecha_(f[4]), hasta: fecha_(f[5]), medio: !!f[6], dias: Number(f[7]) || 0,
+    const v = { id: String(f[0]), anio: Number(f[1]) || Number(fecha_(f[4]).slice(0, 4)), emp: f[2], desde: fecha_(f[4]), hasta: fecha_(f[5]), medio: !!f[6], dias: Number(f[7]) || 0,
       origen: ORIGEN_I[f[8]] || 'empleado', estado: ESTADO_I[f[9]] || 'pendiente', creada: fecha_(f[10]) };
     if (f[6]) v.franja = String(f[6]).toLowerCase();
     if (f[12]) v.motivoRechazo = f[12];
@@ -186,7 +186,7 @@ function laborables_(desde, hasta, festivos) {
 }
 function saldo_(D, id, a) {
   const fijosObj = a === CFG.ANIO_INICIO ? 0 : CFG.DIAS_FIJOS;
-  const vs = D.vac.filter(v => v.emp === id && v.desde.slice(0, 4) === String(a));
+  const vs = D.vac.filter(v => v.emp === id && v.anio === a);   // año al que cuentan los días
   const extra = D.extras.filter(x => x.emp === id && x.anio === a).reduce((t, x) => t + x.dias, 0);
   const base = a === CFG.ANIO_INICIO ? Number(D.inicial[id] || 0) : CFG.DIAS_ANUALES;
   const arrastre = a > CFG.ANIO_INICIO ? sobrante_(D, id, a - 1) : 0;
@@ -216,7 +216,7 @@ function solapa_(D, emp, desde, hasta, franja) {
 /* ================= Escritura ================= */
 
 function filaVac_(v) {
-  return [v.id, Number(v.desde.slice(0, 4)), v.emp, nombre_(v.emp), v.desde, v.hasta, v.medio ? (v.franja === 'tarde' ? 'Tarde' : 'Mañana') : '',
+  return [v.id, v.anio || Number(v.desde.slice(0, 4)), v.emp, nombre_(v.emp), v.desde, v.hasta, v.medio ? (v.franja === 'tarde' ? 'Tarde' : 'Mañana') : '',
     v.dias, ORIGEN[v.origen], ESTADO[v.estado], hoy_(), v.estado === 'pendiente' ? '' : hoy_(), ''];
 }
 function crearVac_(v) { hoja_(HOJA.vac).appendRow(filaVac_(v)); }
@@ -300,7 +300,10 @@ const ADMIN_ = {
     const dias = calcularDias_(desde, hasta, !!p.medio, D.festivos);
     const choque = solapa_(D, p.emp, desde, hasta, franja);
     if (choque) throw new Error('Choca con otras vacaciones (' + choque.desde + ' a ' + choque.hasta + ').');
-    crearVac_({ id: nuevoId_('V'), emp: p.emp, desde, hasta, medio: !!p.medio, franja, dias,
+    // Días adelantados: fechas de un año que cuentan como vacaciones del año siguiente
+    const anioFechas = Number(desde.slice(0, 4)), anio = Number(p.anio) || anioFechas;
+    if (anio !== anioFechas && anio !== anioFechas + 1) throw new Error('Los días solo pueden contar para su año o para el siguiente.');
+    crearVac_({ id: nuevoId_('V'), anio, emp: p.emp, desde, hasta, medio: !!p.medio, franja, dias,
       origen: p.origen === 'admin' ? 'admin' : 'previa', estado: 'aprobada' });
   },
   quitarVac(ses, p) { borrarFila_(HOJA.vac, p.id); },

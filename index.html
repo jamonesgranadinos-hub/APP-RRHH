@@ -271,7 +271,7 @@ const delAnio = (s,a=ANIO) => s.slice(0,4)===String(a);
 const fijosDe = a => a===ANIO_INICIO ? 0 : DIAS_FIJOS;   // el año de arranque no lleva días fijos
 function saldo(id, a=ANIO){
   const DIAS_FIJOS = fijosDe(a);
-  const vs = S.vac.filter(v=>v.emp===id && delAnio(v.desde,a));
+  const vs = S.vac.filter(v=>v.emp===id && anioVac(v)===a);
   const extra = S.extras.filter(x=>x.emp===id && (x.anio||2027)===a).reduce((t,x)=>t+Number(x.dias),0);
   const sinCargar = a===ANIO_INICIO && S.inicial[id]==null;
   const base = a===ANIO_INICIO ? Number(S.inicial[id]||0) : DIAS_ANUALES;
@@ -290,12 +290,15 @@ function solapa(id, desde, hasta, excluir, franja){
   return S.vac.find(v=>v.emp===id && v.id!==excluir && v.estado!=="rechazada" && v.desde<=hasta && v.hasta>=desde && !(franja && v.medio && v.franja && v.franja!==franja));
 }
 const tMedio = v => "Medio día" + (v.franja?` (${v.franja})`:"");
-function explicar(desde,hasta,medio,franja=vista.franja){
+const anioVac = v => v.anio || +v.desde.slice(0,4);   // año al que cuentan (puede ser el siguiente si son días adelantados)
+function explicar(desde,hasta,medio,franja=vista.franja,anterior=false){
   // devuelve {dias, texto, error}
   if(!desde) return {dias:0,texto:""};
   if(!hasta || medio) hasta = desde;
   if(hasta<desde) return {error:"La fecha final es anterior a la inicial."};
-  if(desde.slice(0,4)!=String(ANIO)||hasta.slice(0,4)!=String(ANIO)) return {error:`Las vacaciones tienen que estar dentro de ${ANIO}.`};
+  const ok = y => y===String(ANIO) || (anterior && y===String(ANIO-1));
+  if(!ok(desde.slice(0,4))||!ok(hasta.slice(0,4))) return {error: anterior?`Las fechas tienen que ser de ${ANIO-1} o de ${ANIO}.`:`Las vacaciones tienen que estar dentro de ${ANIO}.`};
+  if(desde.slice(0,4)!==hasta.slice(0,4)) return {error:"Apunta por separado los días de cada año."};
   const l = laborables(desde,hasta);
   const fs = S.festivos.filter(f=>f.fecha>=desde&&f.fecha<=hasta&&[1,2,3,4,5].includes(D(f.fecha).getUTCDay()));
   if(medio){
@@ -328,7 +331,7 @@ const chipEstado = v => v.origen==="admin" ? `<span class="chip fijo">Fijo</span
   v.estado==="aprobada" ? `<span class="chip ok">Aprobada</span>` :
   v.estado==="pendiente" ? `<span class="chip pend">Pendiente</span>` : `<span class="chip no">Rechazada</span>`;
 const lineaVac = (v, acciones="") => `<li><div class="q"><strong>${rango(v.desde,v.hasta)}</strong>
-  <span class="muted small">${v.medio?tMedio(v):dd(valor(v))}${v.origen==="admin"?" · asignados por el administrador":v.origen==="previa"?" · aprobadas antes de la app":""}${v.motivoRechazo?` · Motivo: ${esc(v.motivoRechazo)}`:""}</span></div>
+  <span class="muted small">${v.medio?tMedio(v):dd(valor(v))}${v.origen==="admin"?" · asignados por el administrador":v.origen==="previa"?" · aprobadas antes de la app":""}${anioVac(v)!==+v.desde.slice(0,4)?` · días adelantados, cuentan para ${anioVac(v)}`:""}${v.motivoRechazo?` · Motivo: ${esc(v.motivoRechazo)}`:""}</span></div>
   <div class="acciones">${chipEstado(v)}${acciones}</div></li>`;
 
 function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("ver"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("ver"),2600); }
@@ -356,7 +359,7 @@ function vAcceso(){
 /* ============ Pantalla del empleado ============ */
 function vEmpleado(id){
   const e = emp(id), s = saldo(id);
-  const vs = S.vac.filter(v=>v.emp===id && delAnio(v.desde)).sort((a,b)=>a.desde.localeCompare(b.desde));
+  const vs = S.vac.filter(v=>v.emp===id && anioVac(v)===ANIO).sort((a,b)=>a.desde.localeCompare(b.desde));
   const proximas = vs.filter(v=>v.hasta>=S.hoy || v.estado!=="aprobada");
   const disfrutadas = vs.filter(v=>v.estado==="aprobada" && v.desde<S.hoy);
   const sim = vista.sim;
@@ -487,7 +490,7 @@ function tEmpleados(){
 
 function tFicha(id){
   const e=emp(id), s=saldo(id);
-  const vs=S.vac.filter(v=>v.emp===id && delAnio(v.desde)).sort((a,b)=>a.desde.localeCompare(b.desde));
+  const vs=S.vac.filter(v=>v.emp===id && anioVac(v)===ANIO).sort((a,b)=>a.desde.localeCompare(b.desde));
   const fijos=vs.filter(v=>v.origen==="admin"), pedidas=vs.filter(v=>v.origen!=="admin");
   const DIAS_FIJOS=s.fijosObj, inicio=ANIO===ANIO_INICIO;
   const ex=S.extras.filter(x=>x.emp===id && (x.anio||2027)===ANIO), au=S.aus.filter(a=>a.emp===id).sort((a,b)=>b.desde.localeCompare(a.desde));
@@ -520,16 +523,16 @@ function tFicha(id){
     </div>
   </div>
   <section><div class="bloque"><h3>Apuntar vacaciones ya aprobadas</h3>
-    <p class="muted small">Si antes de usar la app ya le habías dado vacaciones${inicio?` (por ejemplo, para diciembre)`:""}, apúntalas aquí. Quedan como aprobadas y se descuentan de sus días.</p>
-    ${(()=>{ const pc=explicar(sf.pdesde, vista.pmedio?sf.pdesde:sf.phasta, !!vista.pmedio, vista.pmedio); const pasa=pc.dias&&pc.dias>s.pedir;
+    <p class="muted small">Si antes de usar la app ya le habías dado vacaciones${inicio?` (por ejemplo, para diciembre)`:""}, apúntalas aquí. Quedan como aprobadas y se descuentan de sus días.${ANIO>ANIO_INICIO?` Si ya disfrutó en ${ANIO-1} días que le cuentan como de ${ANIO} (días adelantados), pon esas fechas aquí con el año ${ANIO} seleccionado.`:""}</p>
+    ${(()=>{ const adel = ANIO>ANIO_INICIO; const pc=explicar(sf.pdesde, vista.pmedio?sf.pdesde:sf.phasta, !!vista.pmedio, vista.pmedio, adel); const esAdel = pc.dias && sf.pdesde && sf.pdesde.slice(0,4)!==String(ANIO); const pasa=pc.dias&&pc.dias>s.pedir;
     return `<div class="seg" role="group" aria-label="Duración" style="margin-top:14px">
       <button type="button" data-a="pmedio" data-v="" aria-pressed="${!vista.pmedio}">Días completos</button>
       <button type="button" data-a="pmedio" data-v="mañana" aria-pressed="${vista.pmedio==="mañana"}">Medio día mañana</button>
       <button type="button" data-a="pmedio" data-v="tarde" aria-pressed="${vista.pmedio==="tarde"}">Medio día tarde</button></div>
     <form data-f="previa" data-id="${id}" style="margin-top:14px"><div class="fila">
-      <label class="campo"><span>${vista.pmedio?"Día":"Desde"}</span><input type="date" name="pdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sf.pdesde||""}" data-sim required></label>
-      ${vista.pmedio?"":`<label class="campo"><span>Hasta</span><input type="date" name="phasta" min="${sf.pdesde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sf.phasta||""}" data-sim></label>`}</div>
-      <div class="calc">${pc.error?`<div class="aviso mal">${pc.error}</div>`:pc.texto?`<div class="aviso ${pasa?"info":"ok"}">${pc.texto}${pasa?` Ojo: le quedan ${dd(Math.max(0,s.pedir))} libres; se quedaría en negativo.`:""}</div>`:""}</div>
+      <label class="campo"><span>${vista.pmedio?"Día":"Desde"}</span><input type="date" name="pdesde" min="${adel?ANIO-1:ANIO}-01-01" max="${ANIO}-12-31" value="${sf.pdesde||""}" data-sim required></label>
+      ${vista.pmedio?"":`<label class="campo"><span>Hasta</span><input type="date" name="phasta" min="${sf.pdesde||(adel?ANIO-1:ANIO)+"-01-01"}" max="${ANIO}-12-31" value="${sf.phasta||""}" data-sim></label>`}</div>
+      <div class="calc">${pc.error?`<div class="aviso mal">${pc.error}</div>`:pc.texto?`<div class="aviso ${pasa?"info":"ok"}">${pc.texto}${esAdel?` Son días adelantados: cuentan como vacaciones de ${ANIO}.`:""}${pasa?` Ojo: le quedan ${dd(Math.max(0,s.pedir))} libres; se quedaría en negativo.`:""}</div>`:""}</div>
       <button class="btn" style="margin-top:12px" ${(!pc.dias||pc.error)?"disabled":""}>Apuntar como aprobadas</button></form>`; })()}
   </div></section>
   <section><h2>Vacaciones pedidas y aprobadas</h2><ul class="lista">${pedidas.map(v=>lineaVac(v, v.estado==="pendiente"?`<button class="btn chico" data-a="aprobar" data-id="${v.id}">Aprobar</button>`:`<button class="enlace rojo" data-a="quitarVac" data-id="${v.id}">Borrar</button>`)).join("")||`<li class="vacio">No tiene vacaciones en ${ANIO}.</li>`}</ul></section>
@@ -810,8 +813,8 @@ document.addEventListener("submit", async ev=>{
   if(tipo==="salida"){ const id=f.dataset.id, nombre=(emp(id)?.nombre||"").split(" ")[0]; vista.confirmSalida=null; vista.emp=null; hacer("salida",{emp:id, fecha:d.fecha},`${nombre} ya no está en la plantilla`); return; }
   if(tipo==="previa"){
     const id=f.dataset.id, medio=!!vista.pmedio, desde=d.pdesde, hasta=medio?d.pdesde:(d.phasta||d.pdesde);
-    const c=explicar(desde,hasta,medio,vista.pmedio); if(c.error||!c.dias) return;
-    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio, franja:vista.pmedio, origen:"previa"},"Vacaciones apuntadas como aprobadas")) { vista.sim={}; render(); }
+    const c=explicar(desde,hasta,medio,vista.pmedio,ANIO>ANIO_INICIO); if(c.error||!c.dias) return;
+    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio, franja:vista.pmedio, origen:"previa", anio:ANIO},"Vacaciones apuntadas como aprobadas")) { vista.sim={}; render(); }
     return;
   }
   if(tipo==="cerrarBaja"){ vista.cerrando=null; hacer("cerrarBaja",{id:f.dataset.id, fin:d.fin},`Baja cerrada: último día el ${fl(d.fin)}`); return; }
