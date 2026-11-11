@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vacaciones</title>
+<meta name="theme-color" content="#1E4A3B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vacaciones">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cal:#F4F6F3;        /* fondo: cal con un punto de pino */
+  --papel:#FFFFFF;
+  --pino:#1E4A3B;       /* color principal */
+  --pino-2:#2F6B55;
+  --pino-claro:#DCE8E1;
+  --azafran:#D99A1E;    /* pendiente / medio día */
+  --azafran-claro:#F8EBCB;
+  --grana:#A3302A;      /* rechazado / ausencias */
+  --grana-claro:#F4DEDC;
+  --tinta:#18201D;
+  --pizarra:#5B6863;
+  --linea:#D5DCD8;
+  --r:10px;
+  --display:"Bricolage Grotesque", system-ui, sans-serif;
+  --texto:"Atkinson Hyperlegible", system-ui, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--cal);color:var(--tinta);font-family:var(--texto);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;margin:0}
+h1{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:700;margin-bottom:12px}
+h3{font-size:18px;font-weight:700}
+p{margin:0}
+.muted{color:var(--pizarra)}
+.small{font-size:15px}
+
+/* franja de prototipo */
+.demo{background:var(--tinta);color:#E8EDEA;font-size:14px;padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:center}
+.demo label{display:flex;gap:8px;align-items:center}
+.demo input[type=date]{width:auto;min-height:0;background:#2A3430;border:1px solid #44514B;border-radius:6px;padding:3px 6px;color:#fff;color-scheme:dark}
+.demo button{background:none;border:1px solid #44514B;border-radius:6px;color:#E8EDEA;padding:3px 10px;cursor:pointer}
+
+/* cabecera */
+.top{background:var(--pino);color:#fff}
+.top-in{max-width:980px;margin:0 auto;padding:18px 20px;display:flex;align-items:center;gap:16px;justify-content:space-between}
+.marca{font-family:var(--display);font-weight:700;font-size:19px;display:flex;align-items:center;gap:10px}
+.marca svg{flex:none}
+.top button{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.45);border-radius:var(--r);padding:8px 14px;cursor:pointer}
+.top button:hover{border-color:#fff}
+
+main{max-width:980px;margin:0 auto;padding:28px 20px 80px}
+section{margin-top:36px}
+
+/* formularios */
+.campo{display:flex;flex-direction:column;gap:6px;min-width:0}
+.campo span{font-weight:700;font-size:15px}
+input[type=text],input[type=password],input[type=date],input[type=time],input[type=number],select,textarea{
+  width:100%;background:var(--papel);border:1.5px solid var(--linea);border-radius:var(--r);padding:12px 14px;min-height:50px}
+input:focus,select:focus,textarea:focus{border-color:var(--pino-2);outline:none;box-shadow:0 0 0 3px var(--pino-claro)}
+textarea{min-height:80px;resize:vertical}
+input:disabled{background:#EEF1EF;color:var(--pizarra)}
+.fila{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.btn{border:0;border-radius:var(--r);padding:13px 22px;min-height:50px;font-weight:700;cursor:pointer;background:var(--pino);color:#fff}
+.btn:hover{background:var(--pino-2)}
+.btn[disabled]{background:#A9B5AF;cursor:not-allowed}
+.btn.sec{background:var(--papel);color:var(--pino);border:1.5px solid var(--pino)}
+.btn.sec:hover{background:var(--pino-claro)}
+.btn.peligro{background:var(--papel);color:var(--grana);border:1.5px solid var(--grana)}
+.btn.peligro:hover{background:var(--grana-claro)}
+.btn.chico{padding:8px 14px;min-height:40px;font-size:15px}
+.enlace{background:none;border:0;color:var(--pino);text-decoration:underline;cursor:pointer;padding:4px 0;font-weight:700}
+.enlace.rojo{color:var(--grana)}
+
+.seg{display:inline-flex;background:var(--pino-claro);border-radius:var(--r);padding:4px;gap:4px}
+.seg button{border:0;background:transparent;border-radius:7px;padding:10px 16px;cursor:pointer;font-weight:700;color:var(--pino)}
+.seg button[aria-pressed=true]{background:var(--papel);box-shadow:0 1px 2px rgba(30,74,59,.25)}
+
+.bloque{background:var(--papel);border:1px solid var(--linea);border-radius:14px;padding:22px}
+.aviso{border-radius:var(--r);padding:12px 14px;font-size:15px}
+.aviso.ok{background:var(--pino-claro);color:var(--pino)}
+.aviso.mal{background:var(--grana-claro);color:var(--grana)}
+.aviso.info{background:var(--azafran-claro);color:#6B4A07}
+
+/* acceso */
+.acceso{max-width:440px;margin:40px auto 0}
+.acceso h1{margin-bottom:8px}
+.acceso form{display:flex;flex-direction:column;gap:16px;margin-top:24px}
+.prueba{margin-top:28px;font-size:15px}
+.prueba summary{cursor:pointer;font-weight:700;color:var(--pino)}
+.prueba ul{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:6px}
+.prueba li button{width:100%;text-align:left;background:var(--papel);border:1px solid var(--linea);border-radius:8px;padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.prueba li button:hover{border-color:var(--pino-2)}
+
+/* saldo: las casillas */
+.saldo-cabeza{display:flex;flex-wrap:wrap;gap:12px 40px;align-items:flex-end;margin-top:6px}
+.cifra{font-family:var(--display);font-weight:800;font-size:clamp(54px,11vw,88px);line-height:.9;letter-spacing:-.03em;color:var(--pino)}
+.cifra small{font-size:.32em;font-weight:700;letter-spacing:0;margin-left:6px}
+.cifra-2{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;color:var(--tinta)}
+.casillas{display:grid;grid-template-columns:repeat(11,1fr);gap:6px;margin-top:22px;max-width:640px}
+.casilla{aspect-ratio:1;border-radius:5px;display:flex;overflow:hidden;border:1.5px solid var(--linea);background:var(--papel)}
+.casilla i{flex:1;display:block}
+.c-disf{background:var(--pino)}
+.c-apro{background:repeating-linear-gradient(135deg,var(--pino-2) 0 3px,#4E8A72 3px 6px)}
+.c-res{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--pino-claro) 4px 8px)}
+.c-pend{background:var(--azafran)}
+.c-libre{background:transparent}
+.leyenda{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:16px;font-size:15px;list-style:none;padding:0}
+.leyenda li{display:flex;align-items:center;gap:8px}
+.leyenda b{font-variant-numeric:tabular-nums}
+.muestra{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--linea);flex:none}
+
+/* listas de periodos */
+.lista{list-style:none;padding:0;margin:0;border-top:1px solid var(--linea)}
+.lista>li{padding:14px 2px;border-bottom:1px solid var(--linea);display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.lista .q{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 260px}
+.lista .q strong{font-size:17px}
+.vacio{padding:18px 0;color:var(--pizarra)}
+.chip{display:inline-block;border-radius:999px;padding:3px 11px;font-size:14px;font-weight:700;white-space:nowrap}
+.chip.pend{background:var(--azafran-claro);color:#7A5208}
+.chip.ok{background:var(--pino-claro);color:var(--pino)}
+.chip.no{background:var(--grana-claro);color:var(--grana)}
+.chip.fijo{background:var(--pino);color:#fff}
+.chip.gris{background:#E6EAE8;color:var(--pizarra)}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+.calc{margin-top:14px;min-height:24px;font-size:16px}
+
+/* pestañas admin */
+.pestanas{display:flex;gap:4px;border-bottom:2px solid var(--linea);margin:22px 0 0;overflow-x:auto}
+.pestanas button{border:0;background:none;padding:12px 16px;font-weight:700;cursor:pointer;color:var(--pizarra);border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.pestanas button[aria-selected=true]{color:var(--pino);border-bottom-color:var(--pino)}
+.globo{background:var(--azafran);color:#fff;border-radius:999px;font-size:13px;min-width:22px;padding:1px 7px;text-align:center}
+
+/* tabla empleados */
+.tabla{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tabla th{text-align:left;font-size:14px;color:var(--pizarra);font-weight:700;padding:8px 10px;border-bottom:2px solid var(--linea)}
+.tabla td{padding:12px 10px;border-bottom:1px solid var(--linea)}
+.tabla tbody tr{cursor:pointer}
+.tabla tbody tr:hover{background:var(--pino-claro)}
+.tabla .num{text-align:right}
+.barrita{display:inline-block;width:70px;height:8px;background:var(--pino-claro);border-radius:4px;vertical-align:middle;margin-right:8px;overflow:hidden}
+.barrita i{display:block;height:100%;background:var(--pino)}
+
+.volver{margin-bottom:12px}
+.dos{display:grid;gap:28px;grid-template-columns:1fr}
+@media (min-width:820px){.dos{grid-template-columns:1fr 1fr}}
+
+.mes{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.mes h2{margin:0;min-width:200px;text-transform:capitalize}
+.plan-caja{overflow-x:auto;border:1px solid var(--linea);border-radius:12px;background:var(--papel)}
+.plan{border-collapse:separate;border-spacing:0;font-size:14px;min-width:100%}
+.plan th,.plan td{padding:0;text-align:center}
+.plan thead th{font-weight:700;color:var(--pizarra);padding:6px 0;min-width:25px;line-height:1.2;border-bottom:1px solid var(--linea)}
+.plan thead th small{display:block;font-weight:400;font-size:12px}
+.plan .nom{position:sticky;left:0;background:var(--papel);text-align:left;padding:6px 12px;white-space:nowrap;font-weight:700;border-right:1px solid var(--linea);z-index:1;min-width:120px}
+.plan tbody tr+tr td{border-top:1px solid #EEF1EF}
+.plan td.d{height:34px;position:relative}
+.plan .fin{background:#EEF1EF}
+.plan .hoy{box-shadow:inset 0 0 0 2px var(--azafran)}
+.plan i{position:absolute;inset:6px 3px;border-radius:4px;display:block}
+.plan i.ap{background:var(--pino)}
+.plan i.pe{background:var(--azafran)}
+.plan i.au{background:var(--grana)}
+.plan tfoot td{border-top:2px solid var(--linea);font-weight:700;font-variant-numeric:tabular-nums;height:34px;font-size:13px;color:var(--pino)}
+.plan tfoot td.fin{color:var(--pizarra);font-weight:400}
+.plan i.m1{right:50%}.plan i.m2{left:50%}
+.carga{position:fixed;top:0;left:0;right:0;height:3px;z-index:20;overflow:hidden;opacity:0;transition:opacity .2s}
+.cargando .carga{opacity:1}
+.carga i{position:absolute;top:0;bottom:0;width:40%;background:var(--azafran);animation:carga 1s linear infinite}
+@keyframes carga{from{left:-40%}to{left:100%}}
+.cargando main{pointer-events:none;opacity:.7}
+.espera{text-align:center;padding:80px 0;color:var(--pizarra)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
+.toast.ver{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:640px){
+  body{font-size:16px}
+  .casillas{grid-template-columns:repeat(8,1fr);gap:5px}
+  .tabla .ocultable{display:none}
+  .top-in{padding:14px 16px}
+  main{padding:20px 16px 70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="marca">
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="21" rx="4" fill="none" stroke="#fff" stroke-width="2"/><path d="M2 11h24" stroke="#fff" stroke-width="2"/><path d="M8 2v6M20 2v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/><rect x="7" y="15" width="5" height="5" rx="1" fill="#D99A1E"/><rect x="15" y="15" width="5" height="5" rx="1" fill="#fff" opacity=".55"/></svg>
+    Vacaciones
+  </div>
+  <div id="sesion"></div>
+</div></header>
+<main id="app"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="carga" aria-hidden="true"><i></i></div>
+
+<script>
+/* ============ Configuración ============ */
+// Dirección de la aplicación web de Apps Script (Implementar > Gestionar implementaciones > URL)
+const API_URL = "https://script.google.com/macros/s/AKfycbxqiRPwcIXss_mxwnSmTf57GXaRFhKrzJT8Yv-zQAd26SvF6mFqfkNKjwKzj5R7KJa9/exec";
+const CLAVE_SESION = "rrhh-sesion";
+// Estos valores llegan del servidor; aquí solo los iniciales
+let ANIO_INICIO = 2026, DIAS_ANUALES = 22, DIAS_FIJOS = 10, PIN_PROV = "1234";
+let ANIOS = [2026, 2027];
+let ANIO = 2026;           // año que se está viendo
+
+/* ============ Utilidades de fecha (siempre en UTC) ============ */
+const D = s => new Date(s + "T00:00:00Z");
+const ISO = d => d.toISOString().slice(0,10);
+const mas = (s,n) => { const d = D(s); d.setUTCDate(d.getUTCDate()+n); return ISO(d); };
+const DS = ["dom","lun","mar","mié","jue","vie","sáb"];
+const MS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const ML = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const fc = s => { const d=D(s); return `${DS[d.getUTCDay()]} ${d.getUTCDate()} ${MS[d.getUTCMonth()]}${s.slice(0,4)!=String(ANIO)?" "+s.slice(0,4):""}`; };
+const fl = s => { const d=D(s); return `${d.getUTCDate()} de ${ML[d.getUTCMonth()]}`; };
+const rango = (a,b) => a===b ? fc(a) : `${fc(a)} – ${fc(b)}`;
+function dias(a,b){ const r=[]; for(let s=a; s<=b; s=mas(s,1)) r.push(s); return r; }
+const n = x => (Math.round(x*10)/10).toLocaleString("es-ES");
+const dd = x => `${n(x)} ${x===1?"día":"días"}`;
+
+/* ============ DNI ============ */
+const LETRAS = "TRWAGMYFPDXBNJZSQVHLCKE";
+const conLetra = num => num + LETRAS[Number(num)%23];
+function dniValido(v){
+  v = v.toUpperCase().replace(/[\s-]/g,"");
+  let m = v.match(/^([XYZ]?)(\d{7,8})([A-Z])$/);
+  if(!m) return null;
+  let num = m[2]; if(m[1]) num = "XYZ".indexOf(m[1]) + num.padStart(7,"0");
+  return LETRAS[Number(num)%23] === m[3] ? v : null;
+}
+
+/* ============ Estado ============ */
+let S = null;
+let vista = {sesion:null, tab:"solicitudes", emp:null, tipoAus:"falta", medio:false, franja:"mañana", rechazando:null, filtroAus:"todos", sim:{}};
+const emp = id => S.empleados.find(e=>e.id===id);
+const activos = () => S.empleados.filter(e=>e.activo!==false);
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ============ Cálculo de días ============ */
+const festSet = () => new Set(S.festivos.map(f=>f.fecha));
+function laborables(desde,hasta){ const fs=festSet(); return dias(desde,hasta).filter(s=>{const w=D(s).getUTCDay(); return w>0&&w<6&&!fs.has(s);}); }
+const valor = v => v.medio ? 0.5 : laborables(v.desde,v.hasta).length;
+function partir(v){ // días disfrutados (antes de hoy) y por venir
+  if(v.medio) return v.desde < S.hoy ? [0.5,0] : [0,0.5];
+  const l = laborables(v.desde,v.hasta); const p = l.filter(s=>s<S.hoy).length; return [p, l.length-p];
+}
+// Días de un año que no se han gastado: los que no tienen vacaciones aprobadas. Pasan al año siguiente.
+function sobrante(id, a){ const s=saldo(id,a); return Math.max(0, s.total - s.fijos - s.pedidos); }
+const desglose = (s,a=ANIO) => {
+  if(a===ANIO_INICIO) return s.extra?` (${n(s.base)} al empezar + ${n(s.extra)} extra)`:` (los que tenías al empezar con la app)`;
+  const p=[`${DIAS_ANUALES} del año`]; if(s.arrastre) p.push(`${n(s.arrastre)} sin gastar de ${a-1}`); if(s.extra) p.push(`${n(s.extra)} extra`);
+  return p.length>1?` (${p.join(" + ")})`:"";
+};
+const delAnio = (s,a=ANIO) => s.slice(0,4)===String(a);
+const fijosDe = a => a===ANIO_INICIO ? 0 : DIAS_FIJOS;   // el año de arranque no lleva días fijos
+function saldo(id, a=ANIO){
+  const DIAS_FIJOS = fijosDe(a);
+  const vs = S.vac.filter(v=>v.emp===id && delAnio(v.desde,a));
+  const extra = S.extras.filter(x=>x.emp===id && (x.anio||2027)===a).reduce((t,x)=>t+Number(x.dias),0);
+  const sinCargar = a===ANIO_INICIO && S.inicial[id]==null;
+  const base = a===ANIO_INICIO ? Number(S.inicial[id]||0) : DIAS_ANUALES;
+  const arrastre = a>ANIO_INICIO ? sobrante(id, a-1) : 0;   // días sin gastar del año anterior
+  const total = base + extra + arrastre;
+  const apro = vs.filter(v=>v.estado==="aprobada");
+  const fijos = apro.filter(v=>v.origen==="admin").reduce((a,v)=>a+valor(v),0);
+  const pedidos = apro.filter(v=>v.origen!=="admin").reduce((a,v)=>a+valor(v),0);
+  const pend = vs.filter(v=>v.estado==="pendiente").reduce((a,v)=>a+valor(v),0);
+  let disf=0, fut=0; apro.forEach(v=>{const [p,f]=partir(v); disf+=p; fut+=f;});
+  const reserva = Math.max(0, DIAS_FIJOS - fijos);
+  const pedir = total - Math.max(DIAS_FIJOS,fijos) - pedidos - pend;
+  return {total, base, extra, arrastre, fijos, fijosObj:DIAS_FIJOS, sinCargar, pedidos, pend, disf, fut, reserva, pedir, quedan: total - disf};
+}
+function solapa(id, desde, hasta, excluir, franja){
+  return S.vac.find(v=>v.emp===id && v.id!==excluir && v.estado!=="rechazada" && v.desde<=hasta && v.hasta>=desde && !(franja && v.medio && v.franja && v.franja!==franja));
+}
+const tMedio = v => "Medio día" + (v.franja?` (${v.franja})`:"");
+function explicar(desde,hasta,medio,franja=vista.franja){
+  // devuelve {dias, texto, error}
+  if(!desde) return {dias:0,texto:""};
+  if(!hasta || medio) hasta = desde;
+  if(hasta<desde) return {error:"La fecha final es anterior a la inicial."};
+  if(desde.slice(0,4)!=String(ANIO)||hasta.slice(0,4)!=String(ANIO)) return {error:`Las vacaciones tienen que estar dentro de ${ANIO}.`};
+  const l = laborables(desde,hasta);
+  const fs = S.festivos.filter(f=>f.fecha>=desde&&f.fecha<=hasta&&[1,2,3,4,5].includes(D(f.fecha).getUTCDay()));
+  if(medio){
+    if(!l.length) return {error:"Ese día no es laborable."};
+    return {dias:0.5,texto:`Medio día por la ${franja} el ${fc(desde)}.`};
+  }
+  if(!l.length) return {error:"En esas fechas no hay ningún día laborable."};
+  let t = `Son ${dd(l.length)} laborables.`;
+  if(fs.length) t += ` No cuentan ${fs.map(f=>`el ${fl(f.fecha)} (${f.nombre.replace(/ \(.*\)/,"")})`).join(", ")}, ${fs.length>1?"que son festivos":"que es festivo"}.`;
+  return {dias:l.length, texto:t};
+}
+
+/* ============ Piezas comunes ============ */
+const selAnio = () => `<div class="seg" role="group" aria-label="Año">${ANIOS.map(a=>`<button type="button" data-a="anio" data-v="${a}" aria-pressed="${ANIO===a}">${a}</button>`).join("")}</div>`;
+function casillas(s){
+  const tramos = [["c-disf",s.disf],["c-apro",s.fut],["c-res",s.reserva],["c-pend",s.pend],["c-libre",Math.max(0,s.pedir)]];
+  const mitades=[]; tramos.forEach(([c,x])=>{ for(let i=0;i<Math.round(x*2);i++) mitades.push(c); });
+  while(mitades.length < s.total*2) mitades.push("c-libre");
+  let h=""; for(let i=0;i<mitades.length;i+=2) h+=`<span class="casilla"><i class="${mitades[i]}"></i><i class="${mitades[i+1]||"c-libre"}"></i></span>`;
+  return `<div class="casillas" role="img" aria-label="${n(s.total)} días en total: ${n(s.disf)} disfrutados, ${n(s.fut)} aprobados por disfrutar, ${n(s.reserva)} fijos sin asignar, ${n(s.pend)} pendientes y ${n(Math.max(0,s.pedir))} libres">${h}</div>
+  <ul class="leyenda">
+    <li><span class="muestra c-disf"></span>Disfrutados <b>${n(s.disf)}</b></li>
+    <li><span class="muestra c-apro"></span>Aprobados, por disfrutar <b>${n(s.fut)}</b></li>
+    ${s.reserva?`<li><span class="muestra c-res"></span>Fijos aún sin asignar <b>${n(s.reserva)}</b></li>`:""}
+    <li><span class="muestra c-pend"></span>Pendientes de aprobar <b>${n(s.pend)}</b></li>
+    <li><span class="muestra c-libre"></span>Libres para pedir <b>${n(Math.max(0,s.pedir))}</b></li>
+  </ul>`;
+}
+const chipEstado = v => v.origen==="admin" ? `<span class="chip fijo">Fijo</span>` :
+  v.estado==="aprobada" ? `<span class="chip ok">Aprobada</span>` :
+  v.estado==="pendiente" ? `<span class="chip pend">Pendiente</span>` : `<span class="chip no">Rechazada</span>`;
+const lineaVac = (v, acciones="") => `<li><div class="q"><strong>${rango(v.desde,v.hasta)}</strong>
+  <span class="muted small">${v.medio?tMedio(v):dd(valor(v))}${v.origen==="admin"?" · asignados por el administrador":v.origen==="previa"?" · aprobadas antes de la app":""}${v.motivoRechazo?` · Motivo: ${esc(v.motivoRechazo)}`:""}</span></div>
+  <div class="acciones">${chipEstado(v)}${acciones}</div></li>`;
+
+function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("ver"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("ver"),2600); }
+
+/* ============ Pantalla de acceso ============ */
+function vAcceso(){
+  const admin = vista.modo==="admin";
+  return `<div class="acceso">
+    <h1>Mis vacaciones</h1>
+    <p class="muted">${admin?"Acceso del administrador.":"Entra con tu DNI o NIE y tu PIN personal."}</p>
+    <div class="seg" role="group" aria-label="Tipo de acceso" style="margin-top:20px">
+      <button type="button" data-a="modo" data-v="emp" aria-pressed="${!admin}">Empleado</button>
+      <button type="button" data-a="modo" data-v="admin" aria-pressed="${admin}">Administrador</button>
+    </div>
+    <form data-f="entrar" autocomplete="off">
+      <label class="campo"><span>${admin?"Usuario":"DNI o NIE"}</span><input type="text" name="u" required ${admin?"":'placeholder="12345678Z"'} autocapitalize="characters"></label>
+      <label class="campo"><span>PIN</span><input type="password" name="p" inputmode="numeric" maxlength="8" required></label>
+      <div id="errAcceso"></div>
+      <button class="btn">Entrar</button>
+    </form>
+  </div>`;
+}
+
+/* ============ Pantalla del empleado ============ */
+function vEmpleado(id){
+  const e = emp(id), s = saldo(id);
+  const vs = S.vac.filter(v=>v.emp===id && delAnio(v.desde)).sort((a,b)=>a.desde.localeCompare(b.desde));
+  const proximas = vs.filter(v=>v.hasta>=S.hoy || v.estado!=="aprobada");
+  const disfrutadas = vs.filter(v=>v.estado==="aprobada" && v.desde<S.hoy);
+  const sim = vista.sim;
+  const c = explicar(sim.desde, sim.hasta, vista.medio);
+  const exceso = c.dias && c.dias > s.pedir;
+  const fijosVs = vs.filter(v=>v.origen==="admin");
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><p class="muted">Hola, ${esc(e.nombre.split(" ")[0])}. Vacaciones de ${ANIO}.</p>${selAnio()}</div>
+  ${s.sinCargar?`<div class="aviso info" style="margin-top:14px">El administrador todavía no ha cargado los días que te quedan de ${ANIO}.</div>`:""}
+  <section style="margin-top:14px" aria-labelledby="t-saldo">
+    <h2 id="t-saldo" class="sr" style="position:absolute;left:-9999px">Tu saldo</h2>
+    <div class="saldo-cabeza">
+      <div><div class="cifra">${n(s.quedan)}<small>${s.quedan===1?"día":"días"}</small></div><p class="muted">te quedan por disfrutar de ${n(s.total)}${desglose(s)}</p></div>
+      <div><div class="cifra-2">${n(Math.max(0,s.pedir))}</div><p class="muted">puedes pedir todavía</p></div>
+    </div>
+    ${casillas(s)}
+    ${ANIO<ANIOS[ANIOS.length-1] && s.total-s.fijos-s.pedidos>0?`<p class="muted small" style="margin-top:10px">Los días de ${ANIO} que no tengas aprobados antes del 31 de diciembre pasan a ${ANIO+1}.</p>`:""}
+    ${s.arrastre && S.hoy.slice(0,4)<String(ANIO)?`<p class="muted small" style="margin-top:10px">Los ${dd(s.arrastre)} de ${ANIO-1} se calculan con lo que tienes sin aprobar ahora; el número final se sabrá el 31 de diciembre.</p>`:""}
+    ${s.reserva?`<p class="muted small" style="margin-top:10px">El administrador te asignará ${dd(s.reserva)} fijos más. ${fijosVs.length?"":"Aún no te ha puesto ninguno."}</p>`:""}
+  </section>
+
+  <section aria-labelledby="t-pedir">
+    <div class="bloque">
+      <h2 id="t-pedir">Pedir vacaciones</h2>
+      <div class="seg" role="group" aria-label="Duración">
+        <button type="button" data-a="medio" data-v="0" aria-pressed="${!vista.medio}">Día completo o varios</button>
+        <button type="button" data-a="medio" data-v="1" aria-pressed="${vista.medio}">Medio día</button>
+      </div>
+      ${vista.medio?`<div style="margin-top:12px"><div class="seg" role="group" aria-label="Mañana o tarde">
+        <button type="button" data-a="franja" data-v="mañana" aria-pressed="${vista.franja==="mañana"}">Por la mañana</button>
+        <button type="button" data-a="franja" data-v="tarde" aria-pressed="${vista.franja==="tarde"}">Por la tarde</button></div></div>`:""}
+      <form data-f="pedir" style="margin-top:16px">
+        <div class="fila">
+          <label class="campo"><span>${vista.medio?"Día":"Desde"}</span><input type="date" name="desde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sim.desde||""}" data-sim required></label>
+          ${vista.medio?"":`<label class="campo"><span>Hasta</span><input type="date" name="hasta" min="${sim.desde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sim.hasta||""}" data-sim></label>`}
+        </div>
+        <div class="calc" id="calc">${c.error?`<div class="aviso mal">${c.error}</div>`:exceso?`<div class="aviso mal">${c.texto} Solo te quedan ${dd(Math.max(0,s.pedir))} para pedir.</div>`:c.texto?`<div class="aviso ok">${c.texto}</div>`:`<span class="muted small">Elige las fechas y verás cuántos días laborables gastas. Fines de semana y festivos no cuentan.</span>`}</div>
+        <button class="btn" style="margin-top:14px" ${(!c.dias||c.error||exceso)?"disabled":""}>Enviar solicitud</button>
+      </form>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-cita">
+    <div class="bloque">
+      <h2 id="t-cita">Avisar de una cita</h2>
+      <p class="muted small">Si tienes que salir unas horas por una cita médica u otro asunto, indica el día y las horas. No te descuenta vacaciones.</p>
+      <form data-f="avisoHoras" style="margin-top:16px">${formHoras(false)}
+        <div id="errHoras" style="margin-top:12px"></div>
+        <button class="btn" style="margin-top:12px">Enviar aviso</button></form>
+      ${(()=>{ const av=S.aus.filter(a=>a.emp===id&&a.tipo==="horas"&&a.origen==="empleado").sort((a,b)=>b.desde.localeCompare(a.desde));
+        return av.length?`<h3 style="margin-top:24px;margin-bottom:8px">Mis avisos</h3><ul class="lista">${av.map(a=>`<li><div class="q"><strong>${detHoras(a)}</strong><span class="muted small">${esc(a.categoria)}${a.motivo?` · ${esc(a.motivo)}`:""}</span></div>
+          <div class="acciones"><span class="chip ${a.visto?"ok":"gris"}">${a.visto?"Visto por el administrador":"Enviado"}</span>${a.desde>=S.hoy?`<button class="enlace rojo" data-a="quitarAus" data-id="${a.id}">Anular</button>`:""}</div></li>`).join("")}</ul>`:""; })()}
+    </div>
+  </section>
+
+  <section aria-labelledby="t-prox">
+    <h2 id="t-prox">Próximas vacaciones y solicitudes</h2>
+    <ul class="lista">${proximas.length?proximas.map(v=>lineaVac(v, v.estado==="pendiente"?`<button class="enlace rojo" data-a="anular" data-id="${v.id}">Anular</button>`:"")).join(""):`<li class="vacio">No tienes vacaciones pendientes. Usa el formulario de arriba para pedirlas.</li>`}</ul>
+  </section>
+
+  <section aria-labelledby="t-disf">
+    <h2 id="t-disf">Días ya disfrutados</h2>
+    <ul class="lista">${disfrutadas.length?disfrutadas.map(v=>{const [p]=partir(v); return `<li><div class="q"><strong>${rango(v.desde, v.hasta<S.hoy?v.hasta:mas(S.hoy,-1))}</strong><span class="muted small">${v.medio?tMedio(v):dd(p)}${v.origen==="admin"?" · fijos":""}</span></div></li>`}).join(""):`<li class="vacio">Todavía no has disfrutado ningún día este año.</li>`}</ul>
+  </section>
+
+  <section>
+    <details><summary style="cursor:pointer;font-weight:700;color:var(--pino)">Festivos de ${ANIO} en Baza</summary>${listaFestivos(false)}</details>
+  </section>`;
+}
+
+function listaFestivos(editable){
+  const fs=S.festivos.filter(f=>delAnio(f.fecha)).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  return `<ul class="lista" style="margin-top:12px">${fs.map(f=>{const w=D(f.fecha).getUTCDay(); const finde=w===0||w===6;
+    return `<li><div class="q"><strong>${fc(f.fecha)}</strong><span class="muted small">${esc(f.nombre)}${finde?" · cae en fin de semana, no resta días":""}</span></div>
+    <div class="acciones"><span class="chip gris">${esc(f.ambito)}</span>${editable?`<button class="enlace rojo" data-a="quitarFest" data-f="${f.fecha}">Quitar</button>`:""}</div></li>`}).join("")}</ul>`;
+}
+
+/* ============ Administrador ============ */
+function vAdmin(){
+  const pend = S.vac.filter(v=>v.estado==="pendiente").length + S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).length;
+  const tabs = [["solicitudes","Solicitudes y avisos",pend],["calendario","Calendario"],["empleados","Empleados"],["ausencias","Ausencias y bajas"],["festivos","Festivos"]];
+  let cuerpo = vista.tab==="solicitudes"?tSolicitudes(): vista.tab==="empleados"?(vista.emp?tFicha(vista.emp):tEmpleados()): vista.tab==="ausencias"?tAusencias(): vista.tab==="calendario"?tCalendario():tFestivos();
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Administración</h1><p class="muted">Vacaciones de ${ANIO} · ${activos().length} empleados</p></div>${selAnio()}</div>
+  <div class="pestanas" role="tablist">${tabs.map(([k,t,c])=>`<button role="tab" data-a="tab" data-v="${k}" aria-selected="${vista.tab===k}">${t}${c?`<span class="globo">${c}</span>`:""}</button>`).join("")}</div>
+  <div style="margin-top:24px">${cuerpo}</div>`;
+}
+
+function quienFalta(v){
+  const otros = new Set();
+  S.vac.forEach(o=>{ if(o.emp!==v.emp && o.estado==="aprobada" && o.desde<=v.hasta && o.hasta>=v.desde) otros.add(emp(o.emp).nombre.split(" ")[0]); });
+  S.aus.forEach(a=>{ if(a.emp!==v.emp && a.tipo!=="retraso" && a.desde<=v.hasta && finAus(a)>=v.desde) otros.add(emp(a.emp).nombre.split(" ")[0]); });
+  return [...otros];
+}
+function tSolicitudes(){
+  const pend = S.vac.filter(v=>v.estado==="pendiente").sort((a,b)=>a.desde.localeCompare(b.desde));
+  const hechas = S.vac.filter(v=>v.origen==="empleado" && v.estado!=="pendiente").sort((a,b)=>b.desde.localeCompare(a.desde)).slice(0,8);
+  const avisos = S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).sort((a,b)=>(a.desde+a.salida).localeCompare(b.desde+b.salida));
+  return `<h2>Avisos de citas</h2>
+  <ul class="lista" style="margin-bottom:36px">${avisos.length?avisos.map(a=>`<li><div class="q"><strong>${esc(emp(a.emp).nombre)}</strong><span>${detHoras(a)}</span><span class="muted small">${esc(a.categoria)}${a.motivo?` · ${esc(a.motivo)}`:""}</span></div>
+    <div class="acciones"><button class="btn chico" data-a="visto" data-id="${a.id}">Enterado</button></div></li>`).join(""):`<li class="vacio">No hay avisos nuevos.</li>`}</ul>
+  <h2>Vacaciones por aprobar</h2>
+  <ul class="lista">${pend.length?pend.map(v=>{ const e=emp(v.emp), s=saldo(v.emp, +v.desde.slice(0,4)), otros=quienFalta(v);
+    const rech = vista.rechazando===v.id;
+    return `<li><div class="q"><strong>${esc(e.nombre)}</strong>
+      <span>${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}</span>
+      <span class="muted small">Contando sus solicitudes pendientes, le quedan ${dd(Math.max(0,s.pedir))} libres para pedir. ${otros.length?`Esas fechas también faltan: ${otros.join(", ")}.`:"Nadie más falta esas fechas."}</span>
+      ${rech?`<form data-f="rechazar" data-id="${v.id}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><input type="text" name="m" placeholder="Motivo del rechazo (lo verá el empleado)" style="flex:1 1 240px"><button class="btn peligro chico">Rechazar</button><button type="button" class="enlace" data-a="cancelarRech">Cancelar</button></form>`:""}
+      </div>
+      ${rech?"":`<div class="acciones"><button class="btn chico" data-a="aprobar" data-id="${v.id}">Aprobar</button><button class="btn peligro chico" data-a="rech" data-id="${v.id}">Rechazar</button></div>`}</li>`}).join(""):`<li class="vacio">No hay solicitudes pendientes.</li>`}</ul>
+  <section><h2>Últimas resueltas</h2><ul class="lista">${hechas.map(v=>`<li><div class="q"><strong>${esc(emp(v.emp).nombre)}</strong><span class="muted small">${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}</span></div><div class="acciones">${chipEstado(v)}</div></li>`).join("")||`<li class="vacio">Aún no has resuelto ninguna.</li>`}</ul></section>`;
+}
+
+function tEmpleados(){
+  const inicio = ANIO===ANIO_INICIO;
+  return `${inicio&&activos().some(e=>S.inicial[e.id]==null)?`<div class="aviso info" style="margin-bottom:16px">Hay empleados sin los días de ${ANIO_INICIO} cargados. Abre su ficha para ponerlos.</div>`:""}<div style="overflow-x:auto"><table class="tabla"><thead><tr><th>Empleado</th><th>${inicio?"Días al empezar":"Días fijos"}</th><th class="num ocultable">Disfrutados</th><th class="num ocultable">Pendientes</th><th class="num">Puede pedir</th><th class="num">Le quedan</th></tr></thead><tbody>
+  ${activos().map(e=>{const s=saldo(e.id); return `<tr data-a="ficha" data-id="${e.id}" tabindex="0"><td><strong>${esc(e.nombre)}</strong>${e.pinCambiado?"":` <span class="chip gris">Aún no ha entrado</span>`}</td>
+    <td>${inicio?(s.sinCargar?`<span class="chip pend">Sin cargar</span>`:n(s.base)):`<span class="barrita"><i style="width:${Math.min(100,s.fijos/s.fijosObj*100)}%"></i></span>${n(s.fijos)}/${s.fijosObj}`}</td>
+    <td class="num ocultable">${n(s.disf)}</td><td class="num ocultable">${s.pend?`<span class="chip pend">${n(s.pend)}</span>`:"0"}</td>
+    <td class="num">${n(Math.max(0,s.pedir))}</td><td class="num"><strong>${n(s.quedan)}</strong> / ${n(s.total)}</td></tr>`}).join("")}
+  </tbody></table></div>
+  ${(()=>{ const ant=S.empleados.filter(e=>e.activo===false); return ant.length?`<section><h2>Antiguos empleados</h2><p class="muted small" style="margin-bottom:10px">Ya no tienen acceso a la app. Se guarda su historial.</p><ul class="lista">${ant.map(e=>`<li><div class="q"><strong>${esc(e.nombre)}</strong><span class="muted small">Dejó la empresa el ${fl(e.salida)} de ${e.salida.slice(0,4)}</span></div><button class="enlace" data-a="ficha" data-id="${e.id}">Ver ficha</button></li>`).join("")}</ul></section>`:""; })()}
+  <section><div class="bloque"><h2>Añadir empleado</h2>
+    <form data-f="nuevoEmp"><div class="fila">
+      <label class="campo"><span>Nombre y apellidos</span><input type="text" name="nombre" required></label>
+      <label class="campo"><span>DNI o NIE</span><input type="text" name="dni" required autocapitalize="characters"></label>
+    </div><p class="muted small" style="margin-top:12px">Entrará la primera vez con el PIN provisional ${PIN_PROV} y la app le pedirá que elija el suyo.</p><div id="errEmp" style="margin-top:12px"></div><button class="btn" style="margin-top:12px">Añadir empleado</button></form></div></section>`;
+}
+
+function tFicha(id){
+  const e=emp(id), s=saldo(id);
+  const vs=S.vac.filter(v=>v.emp===id && delAnio(v.desde)).sort((a,b)=>a.desde.localeCompare(b.desde));
+  const fijos=vs.filter(v=>v.origen==="admin"), pedidas=vs.filter(v=>v.origen!=="admin");
+  const DIAS_FIJOS=s.fijosObj, inicio=ANIO===ANIO_INICIO;
+  const ex=S.extras.filter(x=>x.emp===id && (x.anio||2027)===ANIO), au=S.aus.filter(a=>a.emp===id).sort((a,b)=>b.desde.localeCompare(a.desde));
+  const sf=vista.sim; const c=explicar(sf.fdesde,sf.fhasta,false);
+  return `<button class="enlace volver" data-a="volver">← Todos los empleados</button>
+  <h2 style="font-size:28px">${esc(e.nombre)}</h2><p class="muted">${e.dni} · ${e.pinCambiado?"Ya ha elegido su PIN":`Todavía usa el PIN provisional ${PIN_PROV}`}</p>
+  ${e.activo===false?`<div class="aviso mal" style="margin:12px 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><span>Dejó la empresa el ${fl(e.salida)} de ${e.salida.slice(0,4)}. Ya no puede entrar en la app.</span><button class="btn sec chico" data-a="readmitir" data-id="${e.id}">Volver a darle de alta</button></div>`:""}
+  ${e.pinCambiado?`<button class="enlace" data-a="resetPin" data-id="${e.id}">Restablecer PIN (si lo ha olvidado)</button>`:""}
+  <div class="saldo-cabeza" style="margin-top:16px"><div><div class="cifra" style="font-size:60px">${n(s.quedan)}<small>días</small></div><p class="muted">le quedan por disfrutar de ${n(s.total)}${desglose(s)}</p></div></div>
+  ${casillas(s)}
+  <div class="dos" style="margin-top:32px">
+    ${inicio?`<div class="bloque"><h3>Días que le quedan en ${ANIO_INICIO}</h3>
+      <p class="muted small">Los días de vacaciones de ${ANIO_INICIO} que todavía no había disfrutado al empezar con la app, contando los que ya tenga aprobados.</p>
+      <form data-f="inicialUno" data-id="${id}" style="margin-top:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <label class="campo" style="width:140px"><span>Días</span><input type="number" name="dias" step="0.5" min="0" max="60" value="${S.inicial[id]??""}" required></label>
+        <button class="btn">Guardar</button></form></div>`:`<div class="bloque"><h3>Días fijos (${n(s.fijos)} de ${DIAS_FIJOS})</h3>
+      <form data-f="fijo" data-id="${id}" style="margin-top:14px"><div class="fila">
+        <label class="campo"><span>Desde</span><input type="date" name="fdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sf.fdesde||""}" data-sim required></label>
+        <label class="campo"><span>Hasta</span><input type="date" name="fhasta" min="${sf.fdesde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sf.fhasta||""}" data-sim></label></div>
+        <div class="calc">${c.error?`<div class="aviso mal">${c.error}</div>`:c.texto?`<div class="aviso ${s.fijos+c.dias>DIAS_FIJOS?"info":"ok"}">${c.texto}${s.fijos+c.dias>DIAS_FIJOS?` Con esto pasaría de los ${DIAS_FIJOS} fijos (${n(s.fijos+c.dias)}).`:""}</div>`:""}</div>
+        <button class="btn" style="margin-top:12px" ${(!c.dias||c.error)?"disabled":""}>Asignar días fijos</button></form>
+      <ul class="lista" style="margin-top:16px">${fijos.map(v=>lineaVac(v,`<button class="enlace rojo" data-a="quitarVac" data-id="${v.id}">Quitar</button>`)).join("")||`<li class="vacio">Sin días fijos asignados.</li>`}</ul>
+    </div>`}
+    <div class="bloque"><h3>Días extra</h3><p class="muted small">Se suman a ${inicio?"los días de":"los 22 días de"} ${ANIO}.</p>
+      <form data-f="extra" data-id="${id}" style="margin-top:14px"><div class="fila">
+        <label class="campo" style="max-width:120px"><span>Días</span><input type="number" name="dias" step="0.5" min="0.5" max="30" required></label>
+        <label class="campo"><span>Motivo</span><input type="text" name="motivo" required></label></div>
+        <button class="btn" style="margin-top:12px">Añadir días extra</button></form>
+      <ul class="lista" style="margin-top:16px">${ex.map(x=>`<li><div class="q"><strong>+${dd(Number(x.dias))}</strong><span class="muted small">${esc(x.motivo)}</span></div><button class="enlace rojo" data-a="quitarExtra" data-id="${x.id}">Quitar</button></li>`).join("")||`<li class="vacio">Sin días extra.</li>`}</ul>
+    </div>
+  </div>
+  <section><div class="bloque"><h3>Apuntar vacaciones ya aprobadas</h3>
+    <p class="muted small">Si antes de usar la app ya le habías dado vacaciones${inicio?` (por ejemplo, para diciembre)`:""}, apúntalas aquí. Quedan como aprobadas y se descuentan de sus días.</p>
+    ${(()=>{ const pc=explicar(sf.pdesde, vista.pmedio?sf.pdesde:sf.phasta, !!vista.pmedio, vista.pmedio); const pasa=pc.dias&&pc.dias>s.pedir;
+    return `<div class="seg" role="group" aria-label="Duración" style="margin-top:14px">
+      <button type="button" data-a="pmedio" data-v="" aria-pressed="${!vista.pmedio}">Días completos</button>
+      <button type="button" data-a="pmedio" data-v="mañana" aria-pressed="${vista.pmedio==="mañana"}">Medio día mañana</button>
+      <button type="button" data-a="pmedio" data-v="tarde" aria-pressed="${vista.pmedio==="tarde"}">Medio día tarde</button></div>
+    <form data-f="previa" data-id="${id}" style="margin-top:14px"><div class="fila">
+      <label class="campo"><span>${vista.pmedio?"Día":"Desde"}</span><input type="date" name="pdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sf.pdesde||""}" data-sim required></label>
+      ${vista.pmedio?"":`<label class="campo"><span>Hasta</span><input type="date" name="phasta" min="${sf.pdesde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sf.phasta||""}" data-sim></label>`}</div>
+      <div class="calc">${pc.error?`<div class="aviso mal">${pc.error}</div>`:pc.texto?`<div class="aviso ${pasa?"info":"ok"}">${pc.texto}${pasa?` Ojo: le quedan ${dd(Math.max(0,s.pedir))} libres; se quedaría en negativo.`:""}</div>`:""}</div>
+      <button class="btn" style="margin-top:12px" ${(!pc.dias||pc.error)?"disabled":""}>Apuntar como aprobadas</button></form>`; })()}
+  </div></section>
+  <section><h2>Vacaciones pedidas y aprobadas</h2><ul class="lista">${pedidas.map(v=>lineaVac(v, v.estado==="pendiente"?`<button class="btn chico" data-a="aprobar" data-id="${v.id}">Aprobar</button>`:`<button class="enlace rojo" data-a="quitarVac" data-id="${v.id}">Borrar</button>`)).join("")||`<li class="vacio">No tiene vacaciones en ${ANIO}.</li>`}</ul></section>
+  <section><h2>Ausencias y bajas</h2><ul class="lista">${au.map(a=>lineaAus(a,false)).join("")||`<li class="vacio">Sin ausencias registradas.</li>`}</ul></section>
+  ${e.activo===false?"":`<section><div class="bloque" style="border-color:var(--grana-claro)"><h2>Deja la empresa</h2>
+    <p class="muted small">Deja de tener acceso a la app y sale de la lista de empleados. Su historial de vacaciones y ausencias se conserva. Las solicitudes y avisos que tenga pendientes se anulan.</p>
+    <form data-f="salida" data-id="${id}" style="margin-top:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <label class="campo" style="width:200px"><span>Último día de trabajo</span><input type="date" name="fecha" value="${S.hoy}" required></label>
+      ${vista.confirmSalida===id?`<span style="font-weight:700">¿Seguro?</span><button class="btn peligro">Sí, quitar de la plantilla</button><button type="button" class="enlace" data-a="cancelarSalida">Cancelar</button>`:`<button type="button" class="btn peligro" data-a="pedirSalida" data-id="${id}">Quitar de la plantilla</button>`}
+    </form></div></section>`}`;
+}
+
+const TIPOS = {horas:"Ausencia por horas", baja:"Baja", permiso:"Permiso", falta:"Falta puntual", retraso:"Retraso"};
+const minutos = (p,l) => { if(!p||!l) return 0; const [a,b]=p.split(":").map(Number),[c,d]=l.split(":").map(Number); return (c*60+d)-(a*60+b); };
+const duracion = m => { const h=Math.floor(m/60), r=m%60; return h&&r?`${h} h ${r} min`:h?`${h} h`:`${r} min`; };
+const detHoras = a => `${fc(a.desde)} · de ${a.salida} a ${a.vuelta} · <strong>${duracion(minutos(a.salida,a.vuelta))}</strong>`;
+const finAus = a => a.hasta || "9999-12-31";   // baja sin fecha de fin: sigue abierta
+function lineaAus(a, conNombre){
+  if(!a.hasta){
+    const llevan = a.desde<=S.hoy ? dias(a.desde,S.hoy).length : 0;
+    const cerrando = vista.cerrando===a.id;
+    return `<li><div class="q"><strong>${conNombre?esc(emp(a.emp).nombre):TIPOS[a.tipo]}</strong>
+      <span class="small">Desde el ${fc(a.desde)} · <strong>sin fecha de fin</strong>${llevan?` · lleva ${dd(llevan)}`:""}</span>${a.motivo?`<span class="muted small">Motivo: ${esc(a.motivo)}</span>`:""}
+      ${cerrando?`<form data-f="cerrarBaja" data-id="${a.id}" style="margin-top:10px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"><label class="campo" style="width:200px"><span>Último día de baja</span><input type="date" name="fin" min="${a.desde}" value="${S.hoy>=a.desde?S.hoy:a.desde}" required></label><button class="btn chico">Guardar fecha de fin</button><button type="button" class="enlace" data-a="cancelarCierre">Cancelar</button></form>`:""}</div>
+      <div class="acciones"><span class="chip no">${TIPOS[a.tipo]} abierta</span>${cerrando?"":`<button class="btn sec chico" data-a="cerrarBaja" data-id="${a.id}">Poner fecha de fin</button>`}<button class="enlace rojo" data-a="quitarAus" data-id="${a.id}">Borrar</button></div></li>`;
+  }
+  const det = a.tipo==="retraso" ? `${fc(a.desde)} · llegó a las ${a.llegada} (entrada ${a.prevista}) · <strong>${minutos(a.prevista,a.llegada)} min</strong>` :
+    a.tipo==="horas" ? `${detHoras(a)} · ${esc(a.categoria)}${a.origen==="empleado"?" · avisó el empleado":""}` :
+    `${rango(a.desde,a.hasta)} · ${dd(dias(a.desde,a.hasta).length)} naturales`;
+  return `<li><div class="q"><strong>${conNombre?esc(emp(a.emp).nombre):TIPOS[a.tipo]}</strong><span class="small">${det}</span>${a.motivo?`<span class="muted small">Motivo: ${esc(a.motivo)}</span>`:""}</div>
+  <div class="acciones"><span class="chip ${a.tipo==="retraso"||a.tipo==="horas"?"pend":"no"}">${TIPOS[a.tipo]}</span><button class="enlace rojo" data-a="quitarAus" data-id="${a.id}">Borrar</button></div></li>`;
+}
+function formHoras(conEmpleado){
+  return `<div class="fila">
+    ${conEmpleado?`<label class="campo"><span>Empleado</span><select name="emp" required><option value="">Elige…</option>${activos().map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("")}</select></label>`:""}
+    <label class="campo"><span>Día</span><input type="date" name="desde" min="${ANIO}-01-01" max="${ANIO}-12-31" required></label>
+    <label class="campo"><span>${conEmpleado?"Sale a las":"Me voy a las"}</span><input type="time" name="salida" required></label>
+    <label class="campo"><span>${conEmpleado?"Vuelve a las":"Vuelvo a las"}</span><input type="time" name="vuelta" required></label>
+  </div>
+  <div class="fila" style="margin-top:14px">
+    <label class="campo"><span>Tipo de cita</span><select name="categoria"><option>Cita médica</option><option>Otro motivo</option></select></label>
+    <label class="campo"><span>Detalle (opcional)</span><input type="text" name="motivo" placeholder="Por ejemplo: gestión en el ayuntamiento"></label>
+  </div>`;
+}
+function tAusencias(){
+  const t = vista.tipoAus;
+  const lista = S.aus.filter(a=>vista.filtroAus==="todos"||a.emp===vista.filtroAus).sort((a,b)=>(!a.hasta)-(!b.hasta) ? (!b.hasta)-(!a.hasta) : b.desde.localeCompare(a.desde));
+  const ret = lista.filter(a=>a.tipo==="retraso");
+  const ayuda = {horas:"El empleado sale unas horas por una cita médica u otro asunto. Los empleados también pueden avisar ellos mismos desde su apartado.", baja:"Baja médica o laboral. No descuenta vacaciones.", permiso:"Permiso retribuido, por ejemplo por fallecimiento de un familiar. No descuenta vacaciones.", falta:"El empleado no vino un día, por ejemplo por ir al médico. Indica el motivo.", retraso:"El empleado llegó tarde a su hora de entrada."}[t];
+  const deBaja = S.aus.filter(a=>a.tipo==="baja" && a.desde<=S.hoy && finAus(a)>=S.hoy && emp(a.emp)?.activo!==false);
+  return `${deBaja.length?`<div class="aviso mal" style="margin-bottom:12px"><strong>De baja hoy:</strong> ${deBaja.map(a=>`${esc(emp(a.emp).nombre)} (${a.hasta?`hasta el ${fl(a.hasta)}`:"sin fecha de fin"})`).join("; ")}.</div>`:""}<div class="aviso info">Solo el administrador ve este apartado. Los empleados solo ven los avisos de citas que envían ellos; no ven sus bajas, permisos, faltas ni retrasos.</div>
+  <section style="margin-top:22px"><div class="bloque"><h2>Registrar</h2>
+    <div class="seg" role="group" aria-label="Tipo de registro" style="flex-wrap:wrap">${Object.entries(TIPOS).map(([k,v])=>`<button type="button" data-a="tipoAus" data-v="${k}" aria-pressed="${t===k}">${v}</button>`).join("")}</div>
+    <p class="muted small" style="margin-top:10px">${ayuda}</p>
+    <form data-f="aus" style="margin-top:14px">${t==="horas"?formHoras(true)+`<div id="errAus" style="margin-top:12px"></div><button class="btn" style="margin-top:12px">Guardar ausencia por horas</button></form>`:`<div class="fila">
+      <label class="campo"><span>Empleado</span><select name="emp" required><option value="">Elige…</option>${activos().map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("")}</select></label>
+      ${t==="baja"||t==="permiso"?`<label class="campo"><span>${t==="baja"?"Fecha de inicio":"Desde"}</span><input type="date" name="desde" required></label><label class="campo"><span>${t==="baja"?"Fecha de fin":"Hasta"}</span><input type="date" name="hasta" required></label>`:`<label class="campo"><span>Fecha</span><input type="date" name="desde" required></label>`}
+    </div>
+    ${t==="baja"?`<label style="display:flex;gap:10px;align-items:center;margin-top:14px;cursor:pointer"><input type="checkbox" name="abierta" style="width:22px;height:22px;accent-color:var(--pino)"> <span>Todavía no se sabe cuándo termina</span></label>`:""}
+    <div class="fila">
+      ${t==="retraso"?`<label class="campo"><span>Hora de entrada</span><input type="time" name="prevista" value="08:00" required></label><label class="campo"><span>Hora de llegada</span><input type="time" name="llegada" required></label>`:""}
+    </div>
+    <label class="campo" style="margin-top:14px"><span>Motivo${t==="falta"||t==="permiso"?"":" (opcional)"}</span><input type="text" name="motivo" ${t==="falta"||t==="permiso"?"required":""} placeholder="${t==="permiso"?"Fallecimiento de familiar":t==="falta"?"Cita médica":""}"></label>
+    <div id="errAus" style="margin-top:12px"></div>
+    <button class="btn" style="margin-top:12px">Guardar ${TIPOS[t].toLowerCase()}</button></form>`}</div></section>
+  <section><div style="display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px"><h2 style="margin:0">Registros</h2>
+    <label class="campo" style="min-width:240px"><span class="small">Ver</span><select data-a="filtroAus"><option value="todos">Todos los empleados</option>${S.empleados.map(e=>`<option value="${e.id}" ${vista.filtroAus===e.id?"selected":""}>${esc(e.nombre)}</option>`).join("")}</select></label></div>
+    ${ret.length?`<p class="muted small" style="margin-bottom:10px">${ret.length} ${ret.length===1?"retraso":"retrasos"}, ${ret.reduce((x,a)=>x+minutos(a.prevista,a.llegada),0)} minutos en total.</p>`:""}
+    <ul class="lista">${lista.map(a=>lineaAus(a,true)).join("")||`<li class="vacio">No hay registros.</li>`}</ul></section>`;
+}
+
+function tFestivos(){
+  const fa = S.festivos.filter(f=>delAnio(f.fecha));
+  const lab = fa.filter(f=>{const w=D(f.fecha).getUTCDay(); return w>0&&w<6;}).length;
+  return `<p>${fa.length} festivos en ${ANIO}; ${lab} caen entre semana y no se descuentan de las vacaciones.</p>
+  <p class="muted small" style="margin-top:6px">Se guardan en la pestaña Festivos de la hoja. Revisa cada año que estén los de Andalucía y Baza.</p>
+  ${listaFestivos(true)}
+  <section><div class="bloque"><h2>Añadir festivo</h2><form data-f="fest"><div class="fila">
+    <label class="campo"><span>Fecha</span><input type="date" name="fecha" min="${ANIO}-01-01" max="${ANIO}-12-31" required></label>
+    <label class="campo"><span>Nombre</span><input type="text" name="nombre" required></label>
+    <label class="campo"><span>Ámbito</span><select name="ambito"><option>Local Baza</option><option>Andalucía</option><option>Nacional</option><option>Empresa</option></select></label>
+  </div><button class="btn" style="margin-top:12px">Añadir festivo</button></form></div></section>`;
+}
+
+function vCambiarPin(){
+  return `<div class="acceso">
+    <h1>Elige tu PIN</h1>
+    <p class="muted">Es tu primera vez en la app. Elige un PIN de 4 a 8 cifras que solo sepas tú; lo usarás cada vez que entres.</p>
+    <form data-f="nuevoPin" autocomplete="off">
+      <label class="campo"><span>Tu PIN nuevo</span><input type="password" name="p1" inputmode="numeric" pattern="[0-9]*" maxlength="8" required></label>
+      <label class="campo"><span>Repítelo</span><input type="password" name="p2" inputmode="numeric" pattern="[0-9]*" maxlength="8" required></label>
+      <div id="errPin"></div>
+      <button class="btn">Guardar mi PIN</button>
+    </form></div>`;
+}
+
+function trabajando(s){
+  // cuenta a los empleados en activo que trabajan ese día; medio día de vacaciones cuenta como medio
+  return activos().reduce((t,e)=>{
+    if(S.aus.some(a=>a.emp===e.id && ["baja","permiso","falta"].includes(a.tipo) && a.desde<=s && finAus(a)>=s)) return t;
+    const v = S.vac.filter(v=>v.emp===e.id && v.estado==="aprobada" && v.desde<=s && v.hasta>=s);
+    if(v.some(x=>!x.medio)) return t;
+    return t + (v.length ? Math.max(0, 1 - 0.5*v.length) : 1);
+  },0);
+}
+function tCalendario(){
+  const hoyMes = S.hoy.slice(0,7);
+  const mes = vista.mes || (hoyMes.slice(0,4)===String(ANIO) ? hoyMes : `${ANIO}-01`);
+  const [y,m] = mes.split("-").map(Number);
+  const ult = new Date(Date.UTC(y,m,0)).getUTCDate();
+  const ds = Array.from({length:ult},(_,i)=>`${mes}-${String(i+1).padStart(2,"0")}`);
+  const fs = festSet();
+  const prev = m===1?null:`${y}-${String(m-1).padStart(2,"0")}`, next = m===12?null:`${y}-${String(m+1).padStart(2,"0")}`;
+  const celda = (eid, s) => {
+    const w=D(s).getUTCDay(), fin = w===0||w===6||fs.has(s);
+    let marcas="";
+    S.vac.filter(v=>v.emp===eid && v.estado!=="rechazada" && v.desde<=s && v.hasta>=s).forEach(v=>{
+      if(fin) return;
+      const c = v.estado==="aprobada"?"ap":"pe";
+      marcas += `<i class="${c}${v.medio?(v.franja==="tarde"?" m2":" m1"):""}" title="${v.estado==="aprobada"?"Vacaciones aprobadas":"Pendiente de aprobar"}${v.medio?` · ${tMedio(v).toLowerCase()}`:""}"></i>`;
+    });
+    S.aus.filter(a=>a.emp===eid && ["baja","permiso","falta"].includes(a.tipo) && a.desde<=s && finAus(a)>=s).forEach(a=>{ if(!fin) marcas += `<i class="au" title="${TIPOS[a.tipo]}"></i>`; });
+    return `<td class="d${fin?" fin":""}${s===S.hoy?" hoy":""}">${marcas}</td>`;
+  };
+  const enMes = S.vac.filter(v=>v.estado==="aprobada" && v.desde<=ds[ult-1] && v.hasta>=ds[0] && emp(v.emp)?.activo!==false).sort((a,b)=>a.desde.localeCompare(b.desde));
+  return `<div class="mes">
+    <button class="btn sec chico" data-a="mes" data-v="${prev||""}" ${prev?"":"disabled"} aria-label="Mes anterior">‹</button>
+    <h2>${ML[m-1]} ${y}</h2>
+    <button class="btn sec chico" data-a="mes" data-v="${next||""}" ${next?"":"disabled"} aria-label="Mes siguiente">›</button></div>
+  <div class="plan-caja"><table class="plan"><thead><tr><th class="nom">Empleado</th>${ds.map(s=>`<th>${+s.slice(8)}<small>${DS[D(s).getUTCDay()].slice(0,1).toUpperCase()}</small></th>`).join("")}</tr></thead>
+  <tbody>${activos().map(e=>`<tr><td class="nom">${esc(e.nombre.split(" ").slice(0,2).join(" "))}</td>${ds.map(s=>celda(e.id,s)).join("")}</tr>`).join("")}</tbody>
+  <tfoot><tr><td class="nom">Total trabajando</td>${ds.map(s=>{ const w=D(s).getUTCDay(); if(w===0||w===6||fs.has(s)) return `<td class="fin tot">–</td>`;
+    const t=trabajando(s); return `<td class="tot" title="${n(t)} de ${activos().length} trabajando">${n(t)}</td>`; }).join("")}</tr></tfoot></table></div>
+  <ul class="leyenda">
+    <li><span class="muestra" style="background:var(--pino);border-color:var(--pino)"></span>Vacaciones aprobadas</li>
+    <li><span class="muestra" style="background:var(--azafran);border-color:var(--azafran)"></span>Pendiente de aprobar</li>
+    <li><span class="muestra" style="background:var(--grana);border-color:var(--grana)"></span>Baja, permiso o falta</li>
+    <li><span class="muestra" style="background:#EEF1EF"></span>Fin de semana o festivo</li>
+    <li class="muted">Media casilla: medio día (izquierda mañana, derecha tarde)</li>
+    <li class="muted">Total trabajando: no cuenta vacaciones aprobadas, bajas, permisos ni faltas; medio día resta 0,5. Las pendientes no restan.</li>
+  </ul>
+  <section><h2>Vacaciones aprobadas en ${ML[m-1]}</h2>
+  <ul class="lista">${enMes.map(v=>`<li><div class="q"><strong>${esc(emp(v.emp).nombre)}</strong><span class="muted small">${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}${v.origen==="admin"?" · días fijos":v.origen==="previa"?" · aprobadas antes de la app":""}</span></div></li>`).join("")||`<li class="vacio">Nadie tiene vacaciones aprobadas este mes.</li>`}</ul></section>`;
+}
+
+/* ============ Conexión con la hoja ============ */
+async function api(accion, datos={}){
+  document.body.classList.add("cargando");
+  try{
+    let r;
+    try{
+      r = await fetch(API_URL, {method:"POST", body: JSON.stringify({accion, token: vista.sesion && vista.sesion.token, ...datos})});
+    }catch(e){ throw new Error("No hay conexión. Comprueba internet y vuelve a probar."); }
+    let j; try{ j = await r.json(); }catch(e){ throw new Error("El servidor no ha respondido bien. Vuelve a probar en un momento."); }
+    if(!j.ok){
+      if(j.error==="SESION"){ cerrarSesion(); throw new Error(j.mensaje); }
+      throw new Error(j.mensaje || j.error || "No se ha podido guardar.");
+    }
+    return j;
+  } finally { document.body.classList.remove("cargando"); }
+}
+async function recargar(){
+  const j = await api("estado");
+  const c = j.cfg || {};
+  ANIO_INICIO = c.ANIO_INICIO ?? ANIO_INICIO; DIAS_ANUALES = c.DIAS_ANUALES ?? DIAS_ANUALES; DIAS_FIJOS = c.DIAS_FIJOS ?? DIAS_FIJOS; PIN_PROV = c.PIN_PROV ?? PIN_PROV;
+  const titulo = t => String(t||"").toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(m,a,l)=>a+l.toUpperCase());
+  (j.empleados||[]).forEach(e=>{ e.nombre = titulo(e.nombre); });
+  S = {hoy:j.hoy, festivos:j.festivos||[], empleados:j.empleados||[], inicial:j.inicial||{}, vac:j.vac||[], aus:j.aus||[], extras:j.extras||[]};
+  const ultimo = Math.max(+S.hoy.slice(0,4)+1, ANIO_INICIO);
+  ANIOS = []; for(let a=ANIO_INICIO; a<=ultimo; a++) ANIOS.push(a);
+  if(vista.sesion && vista.sesion.rol==="emp"){ vista.sesion.id = S.empleados[0]?.id; guardarSesion(); }
+}
+function guardarSesion(){ try{ vista.sesion ? localStorage.setItem(CLAVE_SESION, JSON.stringify(vista.sesion)) : localStorage.removeItem(CLAVE_SESION); }catch(e){} }
+function cerrarSesion(){ vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null}; S=null; guardarSesion(); render(); }
+// Hace una acción en la hoja, vuelve a leer los datos y avisa
+async function hacer(accion, datos, mensaje, despues){
+  try{
+    await api(accion, datos);
+    if(despues) despues();
+    await recargar(); render(); if(mensaje) toast(mensaje);
+    return true;
+  }catch(e){ if(!S) errorCarga(e); else { if(e.message) toast(e.message); render(); } return false; }
+}
+
+function errorCarga(e){
+  if(!vista.sesion){ render(); if(e.message) toast(e.message); return; }
+  document.getElementById("app").innerHTML=`<p class="espera">${esc(e.message||"No se han podido cargar los datos.")}<br><br><button class="btn sec" data-a="recargar">Volver a probar</button></p>`;
+}
+
+/* ============ Render ============ */
+function render(){
+  const app=document.getElementById("app"), ses=document.getElementById("sesion");
+  const s=vista.sesion;
+  ses.innerHTML = s ? `<button type="button" data-a="salir">Salir</button>` : "";
+  if(s && !S && !s.cambiarPin){ app.innerHTML = `<p class="espera">Cargando…</p>`; return; }
+  if(S){ ANIO = vista.anio || Math.min(Math.max(+S.hoy.slice(0,4), ANIOS[0]), ANIOS[ANIOS.length-1]); }
+  app.innerHTML = !s ? vAcceso() : s.cambiarPin ? vCambiarPin() : s.rol==="admin" ? vAdmin() : vEmpleado(s.id);
+}
+function rerenderConFoco(nombre){
+  render();
+  const el=document.querySelector(`[name="${nombre}"]`); if(el) el.focus();
+}
+
+/* ============ Eventos ============ */
+document.addEventListener("click", ev=>{
+  const b = ev.target.closest("[data-a]"); if(!b || b.tagName==="SELECT") return;
+  const a=b.dataset.a, id=b.dataset.id;
+  const v = id && S && S.vac.find(x=>x.id===id);
+  const nom = eid => (emp(eid)?.nombre||"").split(" ")[0];
+  switch(a){
+    case "modo": vista.modo=b.dataset.v; render(); break;
+    case "salir": document.getElementById("toast").classList.remove("ver"); cerrarSesion(); break;
+    case "resetPin": hacer("resetPin",{emp:id},`PIN restablecido a ${PIN_PROV}`); break;
+    case "anio": vista.anio=+b.dataset.v; vista.mes=null; vista.sim={}; render(); break;
+    case "pedirSalida": vista.confirmSalida=id; render(); break;
+    case "cancelarSalida": vista.confirmSalida=null; render(); break;
+    case "readmitir": hacer("readmitir",{emp:id},`${nom(id)} vuelve a estar en la plantilla`); break;
+    case "pmedio": vista.pmedio=b.dataset.v||null; vista.sim={pdesde:vista.sim.pdesde}; render(); break;
+    case "mes": vista.mes=b.dataset.v; render(); break;
+    case "cerrarBaja": vista.cerrando=id; render(); break;
+    case "cancelarCierre": vista.cerrando=null; render(); break;
+    case "franja": vista.franja=b.dataset.v; render(); break;
+    case "medio": vista.medio=b.dataset.v==="1"; vista.sim={desde:vista.sim.desde}; render(); break;
+    case "anular": hacer("anular",{id},"Solicitud anulada"); break;
+    case "tab": vista.tab=b.dataset.v; vista.emp=null; vista.sim={}; render(); if(vista.sesion?.rol==="admin") hacer("estado"); break;
+    case "aprobar": hacer("aprobar",{id},`Aprobada: ${nom(v.emp)}, ${rango(v.desde,v.hasta)}`); break;
+    case "rech": vista.rechazando=id; render(); document.querySelector('[data-f=rechazar] input').focus(); break;
+    case "cancelarRech": vista.rechazando=null; render(); break;
+    case "ficha": vista.emp=id; vista.sim={}; render(); window.scrollTo(0,0); break;
+    case "volver": vista.emp=null; vista.sim={}; render(); break;
+    case "quitarVac": hacer("quitarVac",{id},"Días quitados"); break;
+    case "quitarExtra": hacer("quitarExtra",{id},"Días extra quitados"); break;
+    case "tipoAus": vista.tipoAus=b.dataset.v; render(); break;
+    case "quitarAus": vista.sesion.rol==="admin" ? hacer("quitarAus",{id},"Registro borrado") : hacer("anularAviso",{id},"Aviso anulado"); break;
+    case "visto": hacer("visto",{id},"Marcado como visto"); break;
+    case "quitarFest": hacer("quitarFestivo",{fecha:b.dataset.f},"Festivo quitado"); break;
+    case "recargar": hacer("estado",{},"Datos actualizados"); break;
+  }
+});
+document.addEventListener("keydown", ev=>{ if(ev.key==="Enter" && ev.target.matches("tr[data-a=ficha]")) ev.target.click(); });
+document.addEventListener("change", ev=>{
+  const t=ev.target;
+  if(t.matches("[data-sim]")){ vista.sim[t.name]=t.value; if(t.name==="desde"&&vista.sim.hasta&&vista.sim.hasta<t.value) vista.sim.hasta=t.value; if(t.name==="fdesde"&&vista.sim.fhasta&&vista.sim.fhasta<t.value) vista.sim.fhasta=t.value; if(t.name==="pdesde"&&vista.sim.phasta&&vista.sim.phasta<t.value) vista.sim.phasta=t.value; rerenderConFoco(t.name); }
+  if(t.name==="abierta"){ const h=t.form.querySelector("[name=hasta]"); h.disabled=t.checked; h.required=!t.checked; if(t.checked) h.value=""; }
+  if(t.matches("[data-a=filtroAus]")){ vista.filtroAus=t.value; render(); }
+});
+
+document.addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const f=ev.target, d=Object.fromEntries(new FormData(f)), tipo=f.dataset.f;
+  const err=(sel,t)=>{ const el=document.getElementById(sel); if(el) el.innerHTML=`<div class="aviso mal">${esc(t)}</div>`; };
+  if(tipo==="entrar"){
+    const admin = vista.modo==="admin";
+    if(!admin && !dniValido(d.u)){ err("errAcceso","Ese DNI o NIE no es válido. Revisa los números y la letra."); return; }
+    try{
+      const j = await api("entrar",{modo:admin?"admin":"emp", usuario:d.u, pin:d.p});
+      vista.sesion = {rol:j.rol, token:j.token, cambiarPin:!!j.cambiarPin};
+      if(j.rol==="emp"){ vista.sesion.id = null; }
+      vista.tab="solicitudes"; vista.sim={}; vista.anio=null;
+      guardarSesion();
+      if(!j.cambiarPin){ render(); await recargar(); }
+      render();
+    }catch(e){ if(document.getElementById("errAcceso")) err("errAcceso", e.message); else errorCarga(e); }
+    return;
+  }
+  if(tipo==="nuevoPin"){
+    if(!/^\d{4,8}$/.test(d.p1)){ err("errPin","El PIN tiene que tener entre 4 y 8 cifras, solo números."); return; }
+    if(d.p1===PIN_PROV){ err("errPin",`No puedes usar el PIN provisional ${PIN_PROV}. Elige otro.`); return; }
+    if(d.p1!==d.p2){ err("errPin","Los dos PIN no coinciden. Escríbelos otra vez."); return; }
+    try{
+      await api("cambiarPin",{pin:d.p1});
+      vista.sesion.cambiarPin=false; guardarSesion(); render(); await recargar(); render();
+      toast("PIN guardado. A partir de ahora entra con él.");
+    }catch(e){ if(document.getElementById("errPin")) err("errPin", e.message); else errorCarga(e); }
+    return;
+  }
+  const s = vista.sesion; if(!s || !S) return;
+  if(tipo==="salida"){ const id=f.dataset.id, nombre=(emp(id)?.nombre||"").split(" ")[0]; vista.confirmSalida=null; vista.emp=null; hacer("salida",{emp:id, fecha:d.fecha},`${nombre} ya no está en la plantilla`); return; }
+  if(tipo==="previa"){
+    const id=f.dataset.id, medio=!!vista.pmedio, desde=d.pdesde, hasta=medio?d.pdesde:(d.phasta||d.pdesde);
+    const c=explicar(desde,hasta,medio,vista.pmedio); if(c.error||!c.dias) return;
+    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio, franja:vista.pmedio, origen:"previa"},"Vacaciones apuntadas como aprobadas")) { vista.sim={}; render(); }
+    return;
+  }
+  if(tipo==="cerrarBaja"){ vista.cerrando=null; hacer("cerrarBaja",{id:f.dataset.id, fin:d.fin},`Baja cerrada: último día el ${fl(d.fin)}`); return; }
+  if(tipo==="inicialUno"){ hacer("inicial",{emp:f.dataset.id, dias:d.dias},"Días guardados"); return; }
+  if(tipo==="pedir"){
+    const desde=d.desde, hasta=vista.medio?d.desde:(d.hasta||d.desde);
+    const c=explicar(desde,hasta,vista.medio); if(c.error||!c.dias) return;
+    if(solapa(s.id,desde,hasta,null,vista.medio?vista.franja:null)){ toast("Ya tienes vacaciones o una solicitud en esas fechas"); return; }
+    if(await hacer("pedir",{desde, hasta, medio:vista.medio, franja:vista.franja},"Solicitud enviada al administrador")) { vista.sim={}; render(); }
+    return;
+  }
+  if(tipo==="rechazar"){ vista.rechazando=null; hacer("rechazar",{id:f.dataset.id, motivo:d.m},"Solicitud rechazada"); return; }
+  if(tipo==="fijo"){
+    const id=f.dataset.id, desde=d.fdesde, hasta=d.fhasta||d.fdesde, c=explicar(desde,hasta,false); if(c.error||!c.dias) return;
+    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio:false, origen:"admin"},"Días fijos asignados")) { vista.sim={}; render(); }
+    return;
+  }
+  if(tipo==="extra"){ hacer("extra",{emp:f.dataset.id, anio:ANIO, dias:d.dias, motivo:d.motivo},"Días extra añadidos"); return; }
+  if(tipo==="nuevoEmp"){
+    const dni=dniValido(d.dni); if(!dni){ err("errEmp","Ese DNI o NIE no es válido."); return; }
+    if(S.empleados.some(e=>e.dni===dni)){ err("errEmp","Ya hay un empleado con ese DNI."); return; }
+    hacer("nuevoEmp",{nombre:d.nombre, dni},`Empleado añadido. Entrará con el PIN ${PIN_PROV}`); return;
+  }
+  if(tipo==="avisoHoras" || (tipo==="aus" && vista.tipoAus==="horas")){
+    const esEmp = tipo==="avisoHoras", caja = esEmp?"errHoras":"errAus";
+    if(minutos(d.salida,d.vuelta)<=0){ err(caja,"La hora de vuelta tiene que ser posterior a la de salida."); return; }
+    if(esEmp && d.desde<S.hoy){ err(caja,"Ese día ya ha pasado. Elige hoy o un día posterior."); return; }
+    const datos={desde:d.desde, salida:d.salida, vuelta:d.vuelta, categoria:d.categoria, motivo:d.motivo||""};
+    esEmp ? hacer("aviso",datos,"Aviso enviado al administrador") : hacer("ausencia",{...datos, tipo:"horas", emp:d.emp},"Registro guardado: ausencia por horas");
+    return;
+  }
+  if(tipo==="aus"){
+    const t=vista.tipoAus, abierta = t==="baja" && d.abierta==="on";
+    const hasta = abierta ? "" : (t==="baja"||t==="permiso")?d.hasta:d.desde;
+    if(hasta && hasta<d.desde){ err("errAus","La fecha final es anterior a la inicial."); return; }
+    if(t==="retraso" && minutos(d.prevista,d.llegada)<=0){ err("errAus","La hora de llegada tiene que ser posterior a la de entrada."); return; }
+    hacer("ausencia",{emp:d.emp, tipo:t, desde:d.desde, hasta, motivo:d.motivo||"", prevista:d.prevista, llegada:d.llegada},abierta?"Baja guardada sin fecha de fin":`Registro guardado: ${TIPOS[t].toLowerCase()}`);
+    return;
+  }
+  if(tipo==="fest"){
+    if(S.festivos.some(x=>x.fecha===d.fecha)){ toast("Ese día ya es festivo"); return; }
+    hacer("festivo",{fecha:d.fecha, nombre:d.nombre, ambito:d.ambito},"Festivo añadido"); return;
+  }
+});
+
+/* ============ Arranque ============ */
+(async function(){
+  try{ const t=localStorage.getItem(CLAVE_SESION); if(t) vista.sesion=JSON.parse(t); }catch(e){}
+  render();
+  if(vista.sesion && !vista.sesion.cambiarPin){
+    try{ await recargar(); render(); }
+    catch(e){ errorCarga(e); }
+  }
+  if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js"); }catch(e){} }
+})();
+</script>
+</body>
+</html>
