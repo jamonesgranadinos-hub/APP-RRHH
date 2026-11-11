@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="RRHH">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=block" rel="stylesheet">
 <style>
 :root{
   /* Colores de Jamones Granadinos Baza (sacados del logo) */
@@ -37,6 +37,10 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0}
+/* Que la app se quede quieta en el móvil: sin rebotes, sin desplazamiento lateral, sin zoom al tocar dos veces */
+html,body{overflow-x:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;display:block;text-align:left}
 body{background:var(--cal);color:var(--tinta);font-family:var(--texto);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--azafran);outline-offset:2px}
@@ -208,7 +212,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-11 c</p>
+<p class="version">Versión 2026-11-11 d</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
