@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vacaciones</title>
-<meta name="theme-color" content="#1E4A3B">
+<meta name="theme-color" content="#2E2A80">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icono-192.png">
+<link rel="preload" href="logo.png" as="image">
 <link rel="apple-touch-icon" href="icono-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Vacaciones">
@@ -15,18 +16,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --cal:#F4F6F3;        /* fondo: cal con un punto de pino */
+  /* Colores de Jamones Granadinos Baza (sacados del logo) */
+  --marca-rojo:#E30A1B;
+  --marca-azul:#2E2A80;
+  --cal:#F4F5F9;        /* fondo */
   --papel:#FFFFFF;
-  --pino:#1E4A3B;       /* color principal */
-  --pino-2:#2F6B55;
-  --pino-claro:#DCE8E1;
+  --pino:#2E2A80;       /* color principal: azul de la marca */
+  --pino-2:#423DA8;
+  --pino-claro:#E4E3F3;
   --azafran:#D99A1E;    /* pendiente / medio día */
   --azafran-claro:#F8EBCB;
-  --grana:#A3302A;      /* rechazado / ausencias */
-  --grana-claro:#F4DEDC;
-  --tinta:#18201D;
-  --pizarra:#5B6863;
-  --linea:#D5DCD8;
+  --grana:#B8101D;      /* rechazado / ausencias */
+  --grana-claro:#FBE1E3;
+  --tinta:#1B1A33;
+  --pizarra:#5D5C72;
+  --linea:#D7D8E3;
   --r:10px;
   --display:"Bricolage Grotesque", system-ui, sans-serif;
   --texto:"Atkinson Hyperlegible", system-ui, sans-serif;
@@ -51,12 +55,13 @@ p{margin:0}
 .demo button{background:none;border:1px solid #44514B;border-radius:6px;color:#E8EDEA;padding:3px 10px;cursor:pointer}
 
 /* cabecera */
-.top{background:var(--pino);color:#fff}
-.top-in{max-width:980px;margin:0 auto;padding:18px 20px;display:flex;align-items:center;gap:16px;justify-content:space-between}
-.marca{font-family:var(--display);font-weight:700;font-size:19px;display:flex;align-items:center;gap:10px}
+.top{background:var(--papel);color:var(--marca-azul);border-bottom:4px solid var(--marca-rojo);box-shadow:inset 0 -7px 0 -4px var(--marca-azul)}
+.top-in{max-width:980px;margin:0 auto;padding:10px 20px 13px;display:flex;align-items:center;gap:16px;justify-content:space-between}
+.marca{font-family:var(--display);font-weight:700;font-size:20px;display:flex;align-items:center;gap:14px;color:var(--marca-azul)}
+.marca img{height:46px;width:auto;display:block}
 .marca svg{flex:none}
-.top button{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.45);border-radius:var(--r);padding:8px 14px;cursor:pointer}
-.top button:hover{border-color:#fff}
+.top button{background:transparent;color:var(--marca-azul);border:1.5px solid var(--marca-azul);border-radius:var(--r);padding:8px 14px;cursor:pointer;font-weight:700}
+.top button:hover{background:var(--pino-claro)}
 
 main{max-width:980px;margin:0 auto;padding:28px 20px 80px}
 section{margin-top:36px}
@@ -68,7 +73,7 @@ input[type=text],input[type=password],input[type=date],input[type=time],input[ty
   width:100%;background:var(--papel);border:1.5px solid var(--linea);border-radius:var(--r);padding:12px 14px;min-height:50px}
 input:focus,select:focus,textarea:focus{border-color:var(--pino-2);outline:none;box-shadow:0 0 0 3px var(--pino-claro)}
 textarea{min-height:80px;resize:vertical}
-input:disabled{background:#EEF1EF;color:var(--pizarra)}
+input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .fila{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 .btn{border:0;border-radius:var(--r);padding:13px 22px;min-height:50px;font-weight:700;cursor:pointer;background:var(--pino);color:#fff}
 .btn:hover{background:var(--pino-2)}
@@ -83,7 +88,7 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 
 .seg{display:inline-flex;background:var(--pino-claro);border-radius:var(--r);padding:4px;gap:4px}
 .seg button{border:0;background:transparent;border-radius:7px;padding:10px 16px;cursor:pointer;font-weight:700;color:var(--pino)}
-.seg button[aria-pressed=true]{background:var(--papel);box-shadow:0 1px 2px rgba(30,74,59,.25)}
+.seg button[aria-pressed=true]{background:var(--papel);box-shadow:0 1px 2px rgba(46,42,128,.25)}
 
 .bloque{background:var(--papel);border:1px solid var(--linea);border-radius:14px;padding:22px}
 .aviso{border-radius:var(--r);padding:12px 14px;font-size:15px}
@@ -94,6 +99,9 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 /* acceso */
 .acceso{max-width:440px;margin:40px auto 0}
 .acceso h1{margin-bottom:8px}
+.logo-acceso{display:block;width:220px;max-width:70%;height:auto;margin:0 0 28px}
+
+@media (max-width:640px){.marca img{height:38px}.marca span{font-size:17px}}
 .acceso form{display:flex;flex-direction:column;gap:16px;margin-top:24px}
 .prueba{margin-top:28px;font-size:15px}
 .prueba summary{cursor:pointer;font-weight:700;color:var(--pino)}
@@ -110,7 +118,7 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 .casilla{aspect-ratio:1;border-radius:5px;display:flex;overflow:hidden;border:1.5px solid var(--linea);background:var(--papel)}
 .casilla i{flex:1;display:block}
 .c-disf{background:var(--pino)}
-.c-apro{background:repeating-linear-gradient(135deg,var(--pino-2) 0 3px,#4E8A72 3px 6px)}
+.c-apro{background:repeating-linear-gradient(135deg,var(--pino-2) 0 3px,#7A76C4 3px 6px)}
 .c-res{background:repeating-linear-gradient(135deg,transparent 0 4px,var(--pino-claro) 4px 8px)}
 .c-pend{background:var(--azafran)}
 .c-libre{background:transparent}
@@ -130,7 +138,7 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 .chip.ok{background:var(--pino-claro);color:var(--pino)}
 .chip.no{background:var(--grana-claro);color:var(--grana)}
 .chip.fijo{background:var(--pino);color:#fff}
-.chip.gris{background:#E6EAE8;color:var(--pizarra)}
+.chip.gris{background:#E8E9F0;color:var(--pizarra)}
 .acciones{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
 .calc{margin-top:14px;min-height:24px;font-size:16px}
@@ -163,9 +171,9 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 .plan thead th{font-weight:700;color:var(--pizarra);padding:6px 0;min-width:25px;line-height:1.2;border-bottom:1px solid var(--linea)}
 .plan thead th small{display:block;font-weight:400;font-size:12px}
 .plan .nom{position:sticky;left:0;background:var(--papel);text-align:left;padding:6px 12px;white-space:nowrap;font-weight:700;border-right:1px solid var(--linea);z-index:1;min-width:120px}
-.plan tbody tr+tr td{border-top:1px solid #EEF1EF}
+.plan tbody tr+tr td{border-top:1px solid #EDEEF4}
 .plan td.d{height:34px;position:relative}
-.plan .fin{background:#EEF1EF}
+.plan .fin{background:#EDEEF4}
 .plan .hoy{box-shadow:inset 0 0 0 2px var(--azafran)}
 .plan i{position:absolute;inset:6px 3px;border-radius:4px;display:block}
 .plan i.ap{background:var(--pino)}
@@ -195,10 +203,7 @@ input:disabled{background:#EEF1EF;color:var(--pizarra)}
 </head>
 <body>
 <header class="top"><div class="top-in">
-  <div class="marca">
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="21" rx="4" fill="none" stroke="#fff" stroke-width="2"/><path d="M2 11h24" stroke="#fff" stroke-width="2"/><path d="M8 2v6M20 2v6" stroke="#fff" stroke-width="2" stroke-linecap="round"/><rect x="7" y="15" width="5" height="5" rx="1" fill="#D99A1E"/><rect x="15" y="15" width="5" height="5" rx="1" fill="#fff" opacity=".55"/></svg>
-    Vacaciones
-  </div>
+  <div class="marca"><img src="logo.png" alt="Jamones Granadinos Baza"><span>Vacaciones</span></div>
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
@@ -332,6 +337,7 @@ function toast(t){ const el=document.getElementById("toast"); el.textContent=t; 
 function vAcceso(){
   const admin = vista.modo==="admin";
   return `<div class="acceso">
+    <img class="logo-acceso" src="logo.png" alt="Jamones Granadinos Baza">
     <h1>Mis vacaciones</h1>
     <p class="muted">${admin?"Acceso del administrador.":"Entra con tu DNI o NIE y tu PIN personal."}</p>
     <div class="seg" role="group" aria-label="Tipo de acceso" style="margin-top:20px">
@@ -661,7 +667,7 @@ function tCalendario(){
     <li><span class="muestra" style="background:var(--pino);border-color:var(--pino)"></span>Vacaciones aprobadas</li>
     <li><span class="muestra" style="background:var(--azafran);border-color:var(--azafran)"></span>Pendiente de aprobar</li>
     <li><span class="muestra" style="background:var(--grana);border-color:var(--grana)"></span>Baja, permiso o falta</li>
-    <li><span class="muestra" style="background:#EEF1EF"></span>Fin de semana o festivo</li>
+    <li><span class="muestra" style="background:#EDEEF4"></span>Fin de semana o festivo</li>
     <li class="muted">Media casilla: medio día (izquierda mañana, derecha tarde)</li>
     <li class="muted">Total trabajando: no cuenta vacaciones aprobadas, bajas, permisos ni faltas; medio día resta 0,5. Las pendientes no restan.</li>
   </ul>

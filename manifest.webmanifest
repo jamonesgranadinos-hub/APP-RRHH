@@ -1,13 +1,13 @@
 {
-  "name": "Vacaciones",
+  "name": "Vacaciones · Jamones Granadinos",
   "short_name": "Vacaciones",
   "description": "Vacaciones, citas y ausencias de la plantilla",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F4F6F3",
-  "theme_color": "#1E4A3B",
+  "background_color": "#F4F5F9",
+  "theme_color": "#2E2A80",
   "icons": [
     {"src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
     {"src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
