@@ -477,6 +477,13 @@ function enviarAhora_(quien, titulo, cuerpo) {
   return res;
 }
 
+/** Ejecútala una vez desde el editor (Ejecutar) para dar todos los permisos, también el de enviar avisos. */
+function autorizar() {
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  UrlFetchApp.fetch('https://www.google.com');
+  console.log('Permisos correctos.');
+}
+
 /* ================= Menú en la hoja ================= */
 
 function onOpen() {
