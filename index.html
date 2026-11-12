@@ -216,7 +216,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-12 g</p>
+<p class="version">Versión 2026-11-12 h</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -225,6 +225,17 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 // Dirección de la aplicación web de Apps Script (Implementar > Gestionar implementaciones > URL)
 const API_URL = "https://script.google.com/macros/s/AKfycbxqiRPwcIXss_mxwnSmTf57GXaRFhKrzJT8Yv-zQAd26SvF6mFqfkNKjwKzj5R7KJa9/exec";
 const CLAVE_SESION = "rrhh-sesion";
+// Avisos al móvil (Firebase Cloud Messaging). Datos públicos de la app web de Firebase:
+const FIREBASE = {
+  apiKey: "AIzaSyA56gcTxehV8oIMAx8SIBsAJmed_Di380w",
+  authDomain: "rrhh-jamones-granadinos.firebaseapp.com",
+  projectId: "rrhh-jamones-granadinos",
+  storageBucket: "rrhh-jamones-granadinos.firebasestorage.app",
+  messagingSenderId: "554414951861",
+  appId: "1:554414951861:web:58d50116f612de45721dfc"
+};
+const VAPID = "PEGA_AQUI_LA_CLAVE_VAPID";
+const CLAVE_AVISOS = "rrhh-avisos";
 // Estos valores llegan del servidor; aquí solo los iniciales
 let ANIO_INICIO = 2026, DIAS_ANUALES = 22, DIAS_FIJOS = 10, PIN_PROV = "1234";
 let ANIOS = [2026, 2027];
@@ -379,6 +390,7 @@ function vEmpleado(id){
   const fijosVs = vs.filter(v=>v.origen==="admin");
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><p class="muted">Hola, ${esc(e.nombre.split(" ")[0])}. Vacaciones de ${ANIO}.</p>${selAnio()}</div>
+  ${bloqueAvisos("Te avisaremos cuando te aprueben o rechacen unas vacaciones.")}
   ${s.sinCargar?`<div class="aviso info" style="margin-top:14px">El administrador todavía no ha cargado los días que te quedan de ${ANIO}.</div>`:""}
   <section style="margin-top:14px" aria-labelledby="t-saldo">
     <h2 id="t-saldo" class="sr" style="position:absolute;left:-9999px">Tu saldo</h2>
@@ -454,6 +466,7 @@ function vAdmin(){
   const tabs = [["solicitudes","Solicitudes y avisos",pend],["calendario","Calendario"],["empleados","Empleados"],["ausencias","Ausencias y bajas"],["festivos","Festivos"]];
   let cuerpo = vista.tab==="solicitudes"?tSolicitudes(): vista.tab==="empleados"?(vista.emp?tFicha(vista.emp):tEmpleados()): vista.tab==="ausencias"?tAusencias(): vista.tab==="calendario"?tCalendario():tFestivos();
   return `<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Administración</h1><p class="muted">Vacaciones de ${ANIO} · ${activos().length} empleados</p></div>${selAnio()}</div>
+  ${bloqueAvisos("Te avisaremos cuando alguien pida vacaciones o avise de una cita.", true)}
   <div class="pestanas" role="tablist">${tabs.map(([k,t,c])=>`<button role="tab" data-a="tab" data-v="${k}" aria-selected="${vista.tab===k}">${t}${c?`<span class="globo">${c}</span>`:""}</button>`).join("")}</div>
   <div style="margin-top:24px">${cuerpo}</div>`;
 }
@@ -755,7 +768,10 @@ document.addEventListener("click", ev=>{
   const nom = eid => (emp(eid)?.nombre||"").split(" ")[0];
   switch(a){
     case "modo": vista.modo=b.dataset.v; render(); break;
-    case "salir": document.getElementById("toast").classList.remove("ver"); if(vista.sesion?.token) fetch(API_URL,{method:"POST",body:JSON.stringify({accion:"salir",token:vista.sesion.token})}).catch(()=>{}); cerrarSesion(); break;
+    case "salir": { document.getElementById("toast").classList.remove("ver"); const g=avisosGuardados(); if(vista.sesion?.token) fetch(API_URL,{method:"POST",body:JSON.stringify({accion:"salir",token:vista.sesion.token,fcm:g&&g.fcm})}).catch(()=>{}); try{ localStorage.removeItem(CLAVE_AVISOS); }catch(e){} cerrarSesion(); break; }
+    case "activarAvisos": activarAvisos(false); break;
+    case "ocultarAvisos": vista.avisosOcultos=true; render(); break;
+    case "probarAviso": hacer("probarAviso",{},"Aviso de prueba enviado. Debería llegarte en unos segundos."); break;
     case "resetPin": hacer("resetPin",{emp:id},`PIN restablecido a ${PIN_PROV}`); break;
     case "anio": vista.anio=+b.dataset.v; vista.mes=null; vista.sim={}; render(); break;
     case "pedirSalida": vista.confirmSalida=id; render(); break;
@@ -871,15 +887,57 @@ document.addEventListener("submit", async ev=>{
   }
 });
 
+/* ============ Avisos al móvil ============ */
+const avisosListos = () => FIREBASE && typeof FIREBASE === "object" && VAPID && VAPID.indexOf("PEGA_AQUI") !== 0;
+const soportaAvisos = () => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const instalada = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function avisosGuardados(){ try{ return JSON.parse(localStorage.getItem(CLAVE_AVISOS)||"null"); }catch(e){ return null; } }
+function quienSoy(){ const s=vista.sesion; return s ? (s.rol==="admin" ? "admin" : s.id) : null; }
+function bloqueAvisos(texto, admin){
+  if(!avisosListos()) return "";
+  const g = avisosGuardados(), activo = g && g.quien===quienSoy() && soportaAvisos() && Notification.permission==="granted";
+  if(activo) return admin ? `<p class="muted small" style="margin-top:8px">Avisos activados en este móvil · <button class="enlace" data-a="probarAviso">Enviar aviso de prueba</button></p>` : "";
+  let cuerpo;
+  if(!soportaAvisos()) cuerpo = esIOS() && !instalada() ? "Para recibir avisos en iPhone, primero instala la app: botón Compartir › Añadir a pantalla de inicio, y ábrela desde el icono." : "";
+  else if(Notification.permission==="denied") cuerpo = "Los avisos están bloqueados para esta app. Actívalos en los ajustes del navegador (permisos del sitio › Notificaciones) y vuelve a entrar.";
+  else cuerpo = `${texto} <button class="btn chico" data-a="activarAvisos" style="margin-left:6px">Activar avisos</button>`;
+  if(!cuerpo || vista.avisosOcultos) return "";
+  return `<div class="aviso info" style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span>${cuerpo}</span><button class="enlace" data-a="ocultarAvisos">Ahora no</button></div>`;
+}
+async function tokenFirebase(){
+  const reg = await navigator.serviceWorker.ready;
+  const {initializeApp, getApps} = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+  const {getMessaging, getToken} = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js");
+  const app = getApps()[0] || initializeApp(FIREBASE);
+  return getToken(getMessaging(app), {vapidKey: VAPID, serviceWorkerRegistration: reg});
+}
+async function activarAvisos(silencioso){
+  try{
+    if(!soportaAvisos()) throw new Error("Este móvil no admite avisos.");
+    const perm = silencioso ? Notification.permission : await Notification.requestPermission();
+    if(perm!=="granted"){ if(!silencioso){ toast("Sin permiso no te podemos avisar. Puedes activarlo cuando quieras."); render(); } return; }
+    document.body.classList.add("cargando");
+    let fcm; try{ fcm = await tokenFirebase(); } finally { document.body.classList.remove("cargando"); }
+    const g = avisosGuardados();
+    if(silencioso && g && g.fcm===fcm && g.quien===quienSoy() && g.fecha===S?.hoy) return;
+    await api("registrarAviso",{fcm});
+    try{ localStorage.setItem(CLAVE_AVISOS, JSON.stringify({fcm, quien:quienSoy(), fecha:S?.hoy})); }catch(e){}
+    if(!silencioso){ render(); toast("Avisos activados en este móvil"); }
+  }catch(e){ if(!silencioso){ toast(e.message ? "No se han podido activar los avisos: "+e.message : "No se han podido activar los avisos."); render(); } }
+}
+
 /* ============ Arranque ============ */
 (async function(){
   try{ const t=localStorage.getItem(CLAVE_SESION); if(t) vista.sesion=JSON.parse(t); }catch(e){}
   render();
   if(vista.sesion && !vista.sesion.cambiarPin){
-    try{ await recargar(); render(); }
+    try{ await recargar(); render(); if(avisosListos() && soportaAvisos() && Notification.permission==="granted" && avisosGuardados()) activarAvisos(true); }
     catch(e){ errorCarga(e); }
   }
   if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js"); }catch(e){} }
+  // al volver a la app (por ejemplo, desde un aviso), traer los datos al día
+  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && vista.sesion && S && !vista.sesion.cambiarPin && !document.body.classList.contains("cargando")) recargar().then(render).catch(()=>{}); });
 })();
 </script>
 </body>

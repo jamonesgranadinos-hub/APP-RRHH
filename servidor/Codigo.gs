@@ -14,6 +14,9 @@ const CFG = {
   INTENTOS: 5            // intentos fallidos de PIN antes de bloquear 15 minutos
 };
 
+// Avisos al móvil (Firebase Cloud Messaging). Identificador del proyecto de Firebase:
+const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
+
 const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos' };
 
 const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app' };
@@ -43,20 +46,23 @@ function salida_(o) {
 
 function despachar_(p) {
   if (p.accion === 'entrar') return entrar_(p);
-  if (p.accion === 'salir') { cerrarSesion_(p.token); return { ok: true }; }
+  if (p.accion === 'salir') { cerrarSesion_(p.token); quitarDispositivo_(p.fcm); return { ok: true }; }
   const ses = sesion_(p.token);
   if (!ses) return { ok: false, error: 'SESION', mensaje: 'La sesión ha caducado. Vuelve a entrar.' };
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
+  let r;
+  COLA_AVISOS_ = [];
   try {
     const f = ses.rol === 'admin' ? ADMIN_[p.accion] : EMP_[p.accion];
     if (!f) throw new Error('Acción no permitida.');
-    const r = f(ses, p) || {};
+    r = f(ses, p) || {};
     if (p.accion !== 'estado') SpreadsheetApp.flush();
-    return Object.assign({ ok: true }, r);
   } finally {
     lock.releaseLock();
   }
+  enviarCola_();
+  return Object.assign({ ok: true }, r);
 }
 
 /* ================= Sesiones y PIN ================= */
@@ -295,6 +301,7 @@ const EMP_ = {
     const s = saldo_(D, ses.id, Number(desde.slice(0, 4)));
     if (dias > s.pedir) throw new Error('No te quedan días suficientes para pedir (' + Math.max(0, s.pedir) + ').');
     crearVac_({ id: nuevoId_('V'), emp: ses.id, desde, hasta, medio: !!p.medio, franja, dias, origen: 'empleado', estado: 'pendiente' });
+    avisar_('admin', 'Nueva solicitud de vacaciones', nombreCorto_(ses.id) + ': ' + periodo_(desde, hasta, franja) + ' (' + diasTexto_(dias) + ')');
   },
   anular(ses, p) {
     const r = buscar_(HOJA.vac, p.id);
@@ -307,7 +314,9 @@ const EMP_ = {
     if (desde < hoy_()) throw new Error('Ese día ya ha pasado.');
     crearAus_({ id: nuevoId_('A'), emp: ses.id, tipo: 'horas', desde, hasta: desde, salida, vuelta,
       categoria: p.categoria === 'Otro motivo' ? 'Otro motivo' : 'Cita médica', motivo: texto_(p.motivo), origen: 'empleado', visto: false });
+    avisar_('admin', 'Aviso de cita', nombreCorto_(ses.id) + ' sale el ' + fechaCorta_(desde) + ' de ' + salida + ' a ' + vuelta);
   },
+  registrarAviso(ses, p) { guardarDispositivo_(p.fcm, ses.id); },
   anularAviso(ses, p) {
     const r = buscar_(HOJA.aus, p.id);
     if (r.f[2] !== ses.id || r.f[4] !== TIPO.horas || String(r.f[14]).trim() !== 'Sí' || fecha_(r.f[5]) < hoy_()) throw new Error('No puedes anular ese aviso.');
@@ -322,10 +331,20 @@ const ADMIN_ = {
   aprobar(ses, p) {
     const r = buscar_(HOJA.vac, p.id);
     r.hoja.getRange(r.f.fila, 10, 1, 3).setValues([[ESTADO.aprobada, r.f[10], hoy_()]]);
+    avisar_(r.f[2], 'Vacaciones aprobadas', 'Te han aprobado: ' + periodo_(fecha_(r.f[4]), fecha_(r.f[5]), r.f[6] ? String(r.f[6]).toLowerCase() : null));
   },
   rechazar(ses, p) {
-    const r = buscar_(HOJA.vac, p.id);
-    r.hoja.getRange(r.f.fila, 10, 1, 4).setValues([[ESTADO.rechazada, r.f[10], hoy_(), texto_(p.motivo)]]);
+    const r = buscar_(HOJA.vac, p.id), motivo = texto_(p.motivo);
+    r.hoja.getRange(r.f.fila, 10, 1, 4).setValues([[ESTADO.rechazada, r.f[10], hoy_(), motivo]]);
+    avisar_(r.f[2], 'Vacaciones rechazadas', 'No se han aprobado: ' + periodo_(fecha_(r.f[4]), fecha_(r.f[5]), r.f[6] ? String(r.f[6]).toLowerCase() : null) + (motivo ? '. Motivo: ' + motivo : ''));
+  },
+  registrarAviso(ses, p) { guardarDispositivo_(p.fcm, 'admin'); },
+  probarAviso() {
+    const n = dispositivos_('admin').length;
+    if (!n) throw new Error('Este usuario no tiene ningún móvil con los avisos activados.');
+    const res = enviarAhora_('admin', 'Aviso de prueba', 'Si ves esto, los avisos de la app funcionan.');
+    if (res.errores.length && !res.enviados) throw new Error('No se ha podido enviar: ' + res.errores[0]);
+    return { enviados: res.enviados };
   },
   vacacionesAprobadas(ses, p) {   // días fijos o vacaciones aprobadas antes de la app
     const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = p.medio ? desde : fechaValida_(p.hasta || p.desde);
@@ -360,10 +379,12 @@ const ADMIN_ = {
   resetPin(ses, p) {
     const r = buscar_(HOJA.emp, p.emp); r.hoja.getRange(r.f.fila, 4, 1, 2).setValues([["'" + CFG.PIN_PROV, 'No']]);
     limpiarSesiones_(PropertiesService.getScriptProperties(), p.emp);   // cierra sus sesiones recordadas
+    borrarDispositivosDe_(p.emp);
   },
   salida(ses, p) {
     const fecha = fechaValida_(p.fecha), r = buscar_(HOJA.emp, p.emp);
     limpiarSesiones_(PropertiesService.getScriptProperties(), p.emp);
+    borrarDispositivosDe_(p.emp);
     r.hoja.getRange(r.f.fila, 6).setValue('No'); r.hoja.getRange(r.f.fila, 8).setValue(fecha);
     // anula solicitudes pendientes y avisos posteriores a la salida
     const tv = tabla_(HOJA.vac); tv.filas.filter(f => f[2] === p.emp && f[9] === ESTADO.pendiente).map(f => f.fila).sort((a, b) => b - a).forEach(n => tv.hoja.deleteRow(n));
@@ -393,6 +414,68 @@ const ADMIN_ = {
     if (f) t.hoja.deleteRow(f.fila);
   }
 };
+
+/* ================= Avisos al móvil ================= */
+
+let COLA_AVISOS_ = [];
+const MESES_ = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function fechaCorta_(s) { return Number(s.slice(8, 10)) + ' ' + MESES_[Number(s.slice(5, 7)) - 1]; }
+function periodo_(desde, hasta, franja) {
+  if (franja) return 'medio día (' + franja + ') el ' + fechaCorta_(desde);
+  return desde === hasta ? 'el ' + fechaCorta_(desde) : 'del ' + fechaCorta_(desde) + ' al ' + fechaCorta_(hasta);
+}
+function diasTexto_(n) { return String(n).replace('.', ',') + (n === 1 ? ' día' : ' días'); }
+function nombreCorto_(id) {
+  const n = String(nombre_(id) || id).toLowerCase().replace(/(^|\s)(\S)/g, (m, a, l) => a + l.toUpperCase());
+  return n.split(' ').slice(0, 2).join(' ');
+}
+
+/** Dispositivos guardados: propiedad 'd:<huella>' = {fcm, quien, fecha}. */
+function claveDispositivo_(fcm) {
+  return 'd:' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(fcm)));
+}
+function guardarDispositivo_(fcm, quien) {
+  if (!fcm || String(fcm).length < 20) throw new Error('No se ha podido activar los avisos en este móvil.');
+  PropertiesService.getScriptProperties().setProperty(claveDispositivo_(fcm), JSON.stringify({ fcm: String(fcm), quien, fecha: hoy_() }));
+}
+function quitarDispositivo_(fcm) { if (fcm) PropertiesService.getScriptProperties().deleteProperty(claveDispositivo_(fcm)); }
+function dispositivos_(quien) {
+  const todo = PropertiesService.getScriptProperties().getProperties(), r = [];
+  Object.keys(todo).forEach(k => { if (k.indexOf('d:') !== 0) return; try { const d = JSON.parse(todo[k]); if (d.quien === quien) r.push(d.fcm); } catch (e) {} });
+  return r;
+}
+function borrarDispositivosDe_(quien) {
+  const pr = PropertiesService.getScriptProperties(), todo = pr.getProperties();
+  Object.keys(todo).forEach(k => { if (k.indexOf('d:') !== 0) return; try { if (JSON.parse(todo[k]).quien === quien) pr.deleteProperty(k); } catch (e) {} });
+}
+
+/** Deja el aviso preparado; se envía al acabar la acción. */
+function avisar_(quien, titulo, cuerpo) { COLA_AVISOS_.push([quien, titulo, cuerpo]); }
+function enviarCola_() {
+  const cola = COLA_AVISOS_; COLA_AVISOS_ = [];
+  cola.forEach(a => { try { enviarAhora_(a[0], a[1], a[2]); } catch (e) { console.warn('Aviso no enviado: ' + e); } });
+}
+function enviarAhora_(quien, titulo, cuerpo) {
+  const res = { enviados: 0, errores: [] };
+  if (!FIREBASE_PROYECTO || FIREBASE_PROYECTO.indexOf('PEGA_AQUI') === 0) { res.errores.push('falta el identificador del proyecto de Firebase en el código'); return res; }
+  const tokens = dispositivos_(quien);
+  if (!tokens.length) return res;
+  const url = 'https://fcm.googleapis.com/v1/projects/' + FIREBASE_PROYECTO + '/messages:send';
+  const cab = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'x-goog-user-project': FIREBASE_PROYECTO };
+  const peticiones = tokens.map(t => ({
+    url, method: 'post', contentType: 'application/json', headers: cab, muteHttpExceptions: true,
+    payload: JSON.stringify({ message: { token: t, data: { titulo, cuerpo }, webpush: { headers: { Urgency: 'high', TTL: '86400' } } } })
+  }));
+  UrlFetchApp.fetchAll(peticiones).forEach((resp, i) => {
+    const c = resp.getResponseCode();
+    if (c === 200) { res.enviados++; return; }
+    const txt = resp.getContentText();
+    if (c === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(txt)) { quitarDispositivo_(tokens[i]); }   // móvil que ya no existe
+    let msg = txt; try { msg = JSON.parse(txt).error.message; } catch (e) {}
+    res.errores.push(c + ' ' + msg);
+  });
+  return res;
+}
 
 /* ================= Menú en la hoja ================= */
 
