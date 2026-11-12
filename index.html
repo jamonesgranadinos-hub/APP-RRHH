@@ -38,8 +38,9 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 /* Que la app se quede quieta en el móvil: sin rebotes, sin desplazamiento lateral, sin zoom al tocar dos veces */
-html,body{overflow-x:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior-y:none}
+body{overflow-x:clip;-webkit-tap-highlight-color:transparent}
+button,a,input,select,label{touch-action:manipulation}
 input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;display:block;text-align:left}
 body{background:var(--cal);color:var(--tinta);font-family:var(--texto);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -215,7 +216,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-11 f</p>
+<p class="version">Versión 2026-11-12 g</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
