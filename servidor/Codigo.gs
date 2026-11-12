@@ -19,6 +19,10 @@ const CFG = {
 // Avisos al móvil (Firebase Cloud Messaging). Identificador del proyecto de Firebase:
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
+// Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
+const VERSION_SERVIDOR = '2026-11-12 b';
+const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
+
 const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos' };
 
 const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app' };
@@ -501,12 +505,85 @@ function recordatorioDiario() {
   Object.keys(pr.getProperties()).forEach(k => { if (k.indexOf('r:') === 0 && pr.getProperty(k) < sumar_(hoy, -60)) pr.deleteProperty(k); });
 }
 
-/** Deja programada la revisión diaria (una sola vez; si ya existía, la reemplaza). */
+/** Deja programadas las tareas automáticas: revisión diaria de solicitudes y comprobación de actualizaciones cada hora. */
 function instalarRecordatorio() {
-  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'recordatorioDiario').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers().filter(t => ['recordatorioDiario', 'comprobarActualizacion'].indexOf(t.getHandlerFunction()) >= 0).forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('recordatorioDiario').timeBased().everyDays(1).atHour(CFG.HORA_RECORDATORIO).inTimezone('Europe/Madrid').create();
-  const msg = 'Recordatorio activado: cada día hacia las ' + CFG.HORA_RECORDATORIO + ':00 se revisan las solicitudes pendientes.';
+  ScriptApp.newTrigger('comprobarActualizacion').timeBased().everyHours(1).create();
+  const msg = 'Tareas activadas: cada día hacia las ' + CFG.HORA_RECORDATORIO + ':00 se revisan las solicitudes pendientes, y cada hora se comprueba si hay una versión nueva del código.';
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
+}
+
+/* ================= Actualización automática desde GitHub ================= */
+
+function apiScript_(metodo, ruta, cuerpo) {
+  const r = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + ruta, {
+    method: metodo, contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    payload: cuerpo ? JSON.stringify(cuerpo) : undefined
+  });
+  const c = r.getResponseCode(), t = r.getContentText();
+  if (c >= 300) {
+    let m = t; try { m = JSON.parse(t).error.message; } catch (e) {}
+    if (/Apps Script API|has not been used|usersettings/i.test(m)) m = 'Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings';
+    throw new Error(m);
+  }
+  return t ? JSON.parse(t) : {};
+}
+function descargar_(archivo) {
+  const r = UrlFetchApp.fetch(REPO_RAW + encodeURIComponent(archivo) + '?v=' + Date.now(), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('No se ha podido descargar ' + archivo + ' de GitHub (' + r.getResponseCode() + ').');
+  return r.getContentText();
+}
+
+/** Cada hora: si en GitHub hay otra versión, la instala sin hacer nada a mano. */
+function comprobarActualizacion() {
+  let codigo;
+  try { codigo = descargar_('Codigo.gs'); } catch (e) { console.warn(e.message); return; }
+  const m = codigo.match(/const VERSION_SERVIDOR = '([^']+)'/);
+  if (!m || m[1] === VERSION_SERVIDOR) return;
+  try {
+    const r = aplicarActualizacion_(codigo);
+    enviarAhora_('admin', 'App actualizada', 'La hoja tiene el código nuevo (versión ' + m[1] + ').' + (r.permisosNuevos ? ' Hay permisos nuevos: abre Apps Script y ejecuta "autorizar".' : ''));
+  } catch (e) {
+    console.warn('Actualización fallida: ' + e.message);
+    const pr = PropertiesService.getScriptProperties();
+    if (pr.getProperty('AVISO_ACTUALIZACION') !== m[1]) {   // avisa una sola vez por versión
+      pr.setProperty('AVISO_ACTUALIZACION', m[1]);
+      enviarAhora_('admin', 'No se ha podido actualizar la hoja', e.message);
+    }
+  }
+}
+
+/** También desde el menú App RRHH › Actualizar ahora. */
+function actualizarAhora() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const codigo = descargar_('Codigo.gs'), m = codigo.match(/const VERSION_SERVIDOR = '([^']+)'/);
+    if (m && m[1] === VERSION_SERVIDOR) { ui.alert('Ya tienes la última versión (' + VERSION_SERVIDOR + ').'); return; }
+    const r = aplicarActualizacion_(codigo);
+    ui.alert('Actualizado a la versión ' + (m ? m[1] : '?') + '.' + (r.permisosNuevos ? '\n\nHay permisos nuevos: en Apps Script elige "autorizar" y pulsa Ejecutar.' : ''));
+  } catch (e) { ui.alert('No se ha podido actualizar: ' + e.message); }
+}
+
+function aplicarActualizacion_(codigo) {
+  const manifiesto = descargar_('appsscript.json');
+  JSON.parse(manifiesto);   // comprueba que está bien escrito
+  const actual = apiScript_('get', '/content');
+  const archivos = actual.files || [];
+  const js = archivos.find(f => f.type === 'SERVER_JS'), man = archivos.find(f => f.type === 'JSON');
+  if (!js || !man) throw new Error('No encuentro los archivos del proyecto.');
+  const scopes = t => JSON.stringify((JSON.parse(t).oauthScopes || []).slice().sort());
+  const permisosNuevos = scopes(man.source) !== scopes(manifiesto);
+  js.source = codigo; man.source = manifiesto;
+  apiScript_('put', '/content', { files: archivos });
+  const v = apiScript_('post', '/versions', { description: 'Actualización automática ' + hoy_() });
+  const dep = (apiScript_('get', '/deployments').deployments || []).filter(d =>
+    d.deploymentConfig && d.deploymentConfig.versionNumber && (d.entryPoints || []).some(e => e.entryPointType === 'WEB_APP'));
+  dep.forEach(d => apiScript_('put', '/deployments/' + d.deploymentId, { deploymentConfig: {
+    scriptId: ScriptApp.getScriptId(), versionNumber: v.versionNumber, manifestFileName: 'appsscript',
+    description: 'Versión ' + v.versionNumber + ' (automática)' } }));
+  return { permisosNuevos, version: v.versionNumber, implementaciones: dep.length };
 }
 
 /** Ejecútala una vez desde el editor (Ejecutar) para dar todos los permisos, también el de enviar avisos. */
@@ -521,7 +598,8 @@ function autorizar() {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('App RRHH')
     .addItem('Cambiar PIN del administrador', 'cambiarPinAdmin')
-    .addItem('Activar recordatorio diario de solicitudes', 'instalarRecordatorio')
+    .addItem('Activar tareas automáticas (recordatorio y actualizaciones)', 'instalarRecordatorio')
+    .addItem('Actualizar ahora desde GitHub', 'actualizarAhora')
     .addToUi();
 }
 
