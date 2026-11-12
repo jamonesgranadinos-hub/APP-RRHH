@@ -20,7 +20,7 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-12 c';
+const VERSION_SERVIDOR = '2026-11-12 d';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario' };
@@ -577,14 +577,17 @@ function instalarRecordatorio() {
 function apiScript_(metodo, ruta, cuerpo) {
   const r = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + ruta, {
     method: metodo, contentType: 'application/json', muteHttpExceptions: true,
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    // se usa el proyecto de Firebase (que es tuyo) para la cuota de la API de Apps Script
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'x-goog-user-project': FIREBASE_PROYECTO },
     payload: cuerpo ? JSON.stringify(cuerpo) : undefined
   });
   const c = r.getResponseCode(), t = r.getContentText();
   if (c >= 300) {
     let m = t; try { m = JSON.parse(t).error.message; } catch (e) {}
-    if (/Apps Script API|has not been used|usersettings/i.test(m)) m = 'Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings';
-    throw new Error(m);
+    let pista = '';
+    if (/has not been used in project|is disabled|SERVICE_DISABLED/i.test(m)) pista = 'Hay que activar la "Apps Script API" en el proyecto de Firebase: console.cloud.google.com/apis/library/script.googleapis.com?project=' + FIREBASE_PROYECTO + ' — ';
+    else if (/User has not enabled the Apps Script API|usersettings/i.test(m)) pista = 'Activa la "API de Google Apps Script" en script.google.com/home/usersettings — ';
+    throw new Error(pista + 'Error de Google: ' + m);
   }
   return t ? JSON.parse(t) : {};
 }
