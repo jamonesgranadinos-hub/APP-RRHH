@@ -11,7 +11,9 @@ const CFG = {
   PIN_PROV: '1234',      // PIN provisional de los empleados nuevos
   HORAS_SESION: 6,       // tiempo que dura una sesión abierta
   DIAS_RECORDAR: 90,     // con "Recordarme en este móvil": días sin volver a pedir el PIN (se renueva al usarla)
-  INTENTOS: 5            // intentos fallidos de PIN antes de bloquear 15 minutos
+  INTENTOS: 5,           // intentos fallidos de PIN antes de bloquear 15 minutos
+  DIAS_RECORDATORIO: 15, // aviso al administrador cuando falten estos días para una solicitud pendiente
+  HORA_RECORDATORIO: 8   // hora de la revisión diaria
 };
 
 // Avisos al móvil (Firebase Cloud Messaging). Identificador del proyecto de Firebase:
@@ -477,6 +479,36 @@ function enviarAhora_(quien, titulo, cuerpo) {
   return res;
 }
 
+/* ================= Recordatorio diario ================= */
+
+/**
+ * Se ejecuta sola cada mañana. Avisa al administrador de las solicitudes que siguen pendientes
+ * cuando faltan CFG.DIAS_RECORDATORIO días (o menos) para que empiecen. Cada solicitud se recuerda una sola vez.
+ */
+function recordatorioDiario() {
+  const pr = PropertiesService.getScriptProperties(), hoy = hoy_(), limite = sumar_(hoy, CFG.DIAS_RECORDATORIO);
+  const pendientes = leerTodo_().vac.filter(v => v.estado === 'pendiente' && v.desde >= hoy && v.desde <= limite);
+  pendientes.forEach(v => {
+    const clave = 'r:' + v.id;
+    if (pr.getProperty(clave)) return;
+    const faltan = Math.round((new Date(v.desde + 'T00:00:00Z') - new Date(hoy + 'T00:00:00Z')) / 86400000);
+    const cuando = faltan === 0 ? 'empiezan hoy' : faltan === 1 ? 'empiezan mañana' : 'faltan ' + faltan + ' días';
+    const res = enviarAhora_('admin', 'Vacaciones sin decidir: ' + cuando,
+      nombreCorto_(v.emp) + ': ' + periodo_(v.desde, v.hasta, v.franja || null) + ' (' + diasTexto_(v.dias) + '). Apruébalas o recházalas en la app.');
+    if (res.enviados) pr.setProperty(clave, hoy);
+  });
+  // limpia marcas de solicitudes antiguas
+  Object.keys(pr.getProperties()).forEach(k => { if (k.indexOf('r:') === 0 && pr.getProperty(k) < sumar_(hoy, -60)) pr.deleteProperty(k); });
+}
+
+/** Deja programada la revisión diaria (una sola vez; si ya existía, la reemplaza). */
+function instalarRecordatorio() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'recordatorioDiario').forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('recordatorioDiario').timeBased().everyDays(1).atHour(CFG.HORA_RECORDATORIO).inTimezone('Europe/Madrid').create();
+  const msg = 'Recordatorio activado: cada día hacia las ' + CFG.HORA_RECORDATORIO + ':00 se revisan las solicitudes pendientes.';
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
+}
+
 /** Ejecútala una vez desde el editor (Ejecutar) para dar todos los permisos, también el de enviar avisos. */
 function autorizar() {
   ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
@@ -489,6 +521,7 @@ function autorizar() {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('App RRHH')
     .addItem('Cambiar PIN del administrador', 'cambiarPinAdmin')
+    .addItem('Activar recordatorio diario de solicitudes', 'instalarRecordatorio')
     .addToUi();
 }
 

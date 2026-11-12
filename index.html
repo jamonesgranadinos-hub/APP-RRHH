@@ -216,7 +216,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-12 i</p>
+<p class="version">Versión 2026-11-12 j</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -488,7 +488,7 @@ function tSolicitudes(){
   <ul class="lista">${pend.length?pend.map(v=>{ const e=emp(v.emp), s=saldo(v.emp, +v.desde.slice(0,4)), otros=quienFalta(v);
     const rech = vista.rechazando===v.id;
     return `<li><div class="q"><strong>${esc(e.nombre)}</strong>
-      <span>${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}</span>
+      <span>${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}${(()=>{ const f=Math.round((D(v.desde)-D(S.hoy))/864e5); return f<0?` · <strong style="color:var(--grana)">ya ha empezado</strong>`:f<=15?` · <strong style="color:var(--grana)">${f===0?"empieza hoy":f===1?"empieza mañana":`empieza en ${f} días`}</strong>`:` · empieza en ${f} días`; })()}</span>
       <span class="muted small">Contando sus solicitudes pendientes, le quedan ${dd(Math.max(0,s.pedir))} libres para pedir. ${otros.length?`Esas fechas también faltan: ${otros.join(", ")}.`:"Nadie más falta esas fechas."}</span>
       ${rech?`<form data-f="rechazar" data-id="${v.id}" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><input type="text" name="m" placeholder="Motivo del rechazo (lo verá el empleado)" style="flex:1 1 240px"><button class="btn peligro chico">Rechazar</button><button type="button" class="enlace" data-a="cancelarRech">Cancelar</button></form>`:""}
       </div>
