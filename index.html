@@ -170,7 +170,8 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 @media (min-width:820px){.dos{grid-template-columns:1fr 1fr}}
 
 .mes{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.mes h2{margin:0;min-width:200px;text-transform:capitalize}
+.mes{flex-wrap:nowrap}
+.mes h2{margin:0;min-width:0;flex:0 1 auto;text-transform:capitalize;font-size:clamp(17px,4.8vw,22px)}
 .plan-caja{overflow-x:auto;border:1px solid var(--linea);border-radius:12px;background:var(--papel)}
 .plan{border-collapse:separate;border-spacing:0;font-size:14px;min-width:100%}
 .plan th,.plan td{padding:0;text-align:center}
@@ -196,6 +197,20 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .espera{text-align:center;padding:80px 0;color:var(--pizarra)}
 .recordar{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:16px}
 .recordar input{width:22px;height:22px;accent-color:var(--pino);margin:0}
+.modulos{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:26px}
+.modulo{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;background:var(--papel);border:1.5px solid var(--linea);border-radius:16px;padding:22px 20px;cursor:pointer;color:var(--marca-azul);min-height:170px;transition:border-color .15s, box-shadow .15s}
+.modulo:hover{border-color:var(--marca-azul);box-shadow:0 4px 14px rgba(46,42,128,.12)}
+.modulo:active{transform:scale(.99)}
+.modulo svg{width:52px;height:52px}
+.mod-t{font-family:var(--display);font-weight:800;font-size:23px;display:flex;align-items:center;gap:8px;color:var(--tinta)}
+.mod-s{color:var(--pizarra);font-size:15px}
+@media (max-width:640px){.modulos{grid-template-columns:1fr 1fr;gap:12px}.modulo{min-height:150px;padding:18px 16px}.mod-t{font-size:19px}.modulo svg{width:44px;height:44px}}
+.fichaje{text-align:center;background:var(--papel);border:1px solid var(--linea);border-radius:18px;padding:26px 18px}
+.reloj{font-family:var(--display);font-weight:800;font-size:clamp(64px,18vw,96px);line-height:1;letter-spacing:-.02em;color:var(--marca-azul);margin:8px 0 22px;font-variant-numeric:tabular-nums}
+.fichar{display:block;width:100%;max-width:420px;margin:0 auto;border:0;border-radius:16px;padding:22px;font:inherit;font-family:var(--display);font-size:24px;font-weight:800;cursor:pointer;background:var(--marca-azul);color:#fff;min-height:76px}
+.fichar.salida{background:var(--marca-rojo)}
+.fichar[disabled]{opacity:.6}
+.estado-fichaje{margin:14px 0 6px;font-size:18px}
 .version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
 .toast{overflow-wrap:anywhere;position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
@@ -216,7 +231,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-12 j</p>
+<p class="version">Versión 2026-11-12 k</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -389,8 +404,8 @@ function vEmpleado(id){
   const exceso = c.dias && c.dias > s.pedir;
   const fijosVs = vs.filter(v=>v.origen==="admin");
   return `
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><p class="muted">Hola, ${esc(e.nombre.split(" ")[0])}. Vacaciones de ${ANIO}.</p>${selAnio()}</div>
-  ${bloqueAvisos("Te avisaremos cuando te aprueben o rechacen unas vacaciones.")}
+  ${volverInicio()}
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Vacaciones</h1><p class="muted">Tus vacaciones de ${ANIO}</p></div>${selAnio()}</div>
   ${s.sinCargar?`<div class="aviso info" style="margin-top:14px">El administrador todavía no ha cargado los días que te quedan de ${ANIO}.</div>`:""}
   <section style="margin-top:14px" aria-labelledby="t-saldo">
     <h2 id="t-saldo" class="sr" style="position:absolute;left:-9999px">Tu saldo</h2>
@@ -465,8 +480,7 @@ function vAdmin(){
   const pend = S.vac.filter(v=>v.estado==="pendiente").length + S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).length;
   const tabs = [["solicitudes","Solicitudes y avisos",pend],["calendario","Calendario"],["empleados","Empleados"],["ausencias","Ausencias y bajas"],["festivos","Festivos"]];
   let cuerpo = vista.tab==="solicitudes"?tSolicitudes(): vista.tab==="empleados"?(vista.emp?tFicha(vista.emp):tEmpleados()): vista.tab==="ausencias"?tAusencias(): vista.tab==="calendario"?tCalendario():tFestivos();
-  return `<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Administración</h1><p class="muted">Vacaciones de ${ANIO} · ${activos().length} empleados</p></div>${selAnio()}</div>
-  ${bloqueAvisos("Te avisaremos cuando alguien pida vacaciones o avise de una cita.", true)}
+  return `${volverInicio()}<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Vacaciones</h1><p class="muted">Vacaciones de ${ANIO} · ${activos().length} empleados</p></div>${selAnio()}</div>
   <div class="pestanas" role="tablist">${tabs.map(([k,t,c])=>`<button role="tab" data-a="tab" data-v="${k}" aria-selected="${vista.tab===k}">${t}${c?`<span class="globo">${c}</span>`:""}</button>`).join("")}</div>
   <div style="margin-top:24px">${cuerpo}</div>`;
 }
@@ -724,13 +738,13 @@ async function recargar(){
   ANIO_INICIO = c.ANIO_INICIO ?? ANIO_INICIO; DIAS_ANUALES = c.DIAS_ANUALES ?? DIAS_ANUALES; DIAS_FIJOS = c.DIAS_FIJOS ?? DIAS_FIJOS; PIN_PROV = c.PIN_PROV ?? PIN_PROV;
   const titulo = t => String(t||"").toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(m,a,l)=>a+l.toUpperCase());
   (j.empleados||[]).forEach(e=>{ e.nombre = titulo(e.nombre); });
-  S = {hoy:j.hoy, festivos:j.festivos||[], empleados:j.empleados||[], inicial:j.inicial||{}, vac:j.vac||[], aus:j.aus||[], extras:j.extras||[]};
+  S = {hoy:j.hoy, festivos:j.festivos||[], empleados:j.empleados||[], inicial:j.inicial||{}, vac:j.vac||[], aus:j.aus||[], extras:j.extras||[], registro:j.registro||[]};
   const ultimo = Math.max(+S.hoy.slice(0,4)+1, ANIO_INICIO);
   ANIOS = []; for(let a=ANIO_INICIO; a<=ultimo; a++) ANIOS.push(a);
   if(vista.sesion && vista.sesion.rol==="emp"){ vista.sesion.id = S.empleados[0]?.id; guardarSesion(); }
 }
 function guardarSesion(){ try{ vista.sesion ? localStorage.setItem(CLAVE_SESION, JSON.stringify(vista.sesion)) : localStorage.removeItem(CLAVE_SESION); }catch(e){} }
-function cerrarSesion(){ vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null}; S=null; guardarSesion(); render(); }
+function cerrarSesion(){ vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null, modulo:null, regEdit:null}; S=null; guardarSesion(); if(location.hash) history.replaceState(null,"",location.pathname); render(); }
 // Hace una acción en la hoja, vuelve a leer los datos y avisa
 async function hacer(accion, datos, mensaje, despues){
   try{
@@ -753,7 +767,12 @@ function render(){
   ses.innerHTML = s ? `<button type="button" data-a="salir">Salir</button>` : "";
   if(s && !S && !s.cambiarPin){ app.innerHTML = `<p class="espera">Cargando…</p>`; return; }
   if(S){ ANIO = vista.anio || Math.min(Math.max(+S.hoy.slice(0,4), ANIOS[0]), ANIOS[ANIOS.length-1]); }
-  app.innerHTML = !s ? vAcceso() : s.cambiarPin ? vCambiarPin() : s.rol==="admin" ? vAdmin() : vEmpleado(s.id);
+  const admin = s && s.rol==="admin";
+  if(s && vista.modulo==="horario" && !admin && !emp(s.id)?.horario) vista.modulo=null;
+  app.innerHTML = !s ? vAcceso() : s.cambiarPin ? vCambiarPin() : !vista.modulo ? vInicio()
+    : vista.modulo==="horario" ? (admin ? vHorarioAdmin() : vHorarioEmp(s.id))
+    : (admin ? vAdmin() : vEmpleado(s.id));
+  if(vista.modulo==="horario" && !admin) relojEnMarcha();
 }
 function rerenderConFoco(nombre){
   render();
@@ -784,6 +803,16 @@ document.addEventListener("click", ev=>{
     case "franja": vista.franja=b.dataset.v; render(); break;
     case "medio": vista.medio=b.dataset.v==="1"; vista.sim={desde:vista.sim.desde}; render(); break;
     case "anular": hacer("anular",{id},"Solicitud anulada"); break;
+    case "modulo": irA(b.dataset.v); break;
+    case "inicio": irA(null); break;
+    case "fichar": { b.disabled=true; const tipo=b.dataset.v; api("fichar",{tipo}).then(async j=>{ await recargar(); render(); toast(`${tipo==="entrada"?"Entrada":"Salida"} fichada a las ${j.hora}`); }).catch(e=>{ toast(e.message||"No se ha podido fichar"); render(); }); break; }
+    case "regDia": vista.regFecha=b.dataset.v; vista.regEdit=null; render(); break;
+    case "regMes": vista.regMes=b.dataset.v; render(); break;
+    case "regNuevo": vista.regEdit={emp:b.dataset.emp||"", fecha:b.dataset.f||vista.regFecha||S.hoy}; render(); document.querySelector("[data-f=registro]")?.scrollIntoView({block:"center"}); break;
+    case "regCorregir": { const r=S.registro.find(x=>x.id===id); vista.regEdit={...r}; render(); document.querySelector("[data-f=registro]")?.scrollIntoView({block:"center"}); break; }
+    case "regCancelar": vista.regEdit=null; render(); break;
+    case "regBorrar": { const r=S.registro.find(x=>x.id===id); vista.regEdit=null; hacer("registroBorrar",{id},"Fichaje borrado"); break; }
+    case "regAcceso": hacer("registroAcceso",{emp:id, si:b.dataset.v==="1"}, b.dataset.v==="1"?`${nom(id)} ya puede fichar`:`${nom(id)} ya no ficha`); break;
     case "tab": vista.tab=b.dataset.v; vista.emp=null; vista.sim={}; render(); if(vista.sesion?.rol==="admin") hacer("estado"); break;
     case "aprobar": hacer("aprobar",{id},`Aprobada: ${nom(v.emp)}, ${rango(v.desde,v.hasta)}`); break;
     case "rech": vista.rechazando=id; render(); document.querySelector('[data-f=rechazar] input').focus(); break;
@@ -881,11 +910,124 @@ document.addEventListener("submit", async ev=>{
     hacer("ausencia",{emp:d.emp, tipo:t, desde:d.desde, hasta, motivo:d.motivo||"", prevista:d.prevista, llegada:d.llegada},abierta?"Baja guardada sin fecha de fin":`Registro guardado: ${TIPOS[t].toLowerCase()}`);
     return;
   }
+  if(tipo==="registro"){
+    if(!d.emp){ err("errReg","Elige el empleado."); return; }
+    const e=vista.regEdit||{};
+    if(await hacer("registroGuardar",{id:e.id||"", emp:d.emp, fecha:d.fecha, entrada:d.entrada, salida:d.salida||"", nota:d.nota||""}, e.id?"Fichaje corregido":"Fichaje apuntado")){ vista.regEdit=null; vista.regFecha=d.fecha; render(); }
+    return;
+  }
   if(tipo==="fest"){
     if(S.festivos.some(x=>x.fecha===d.fecha)){ toast("Ese día ya es festivo"); return; }
     hacer("festivo",{fecha:d.fecha, nombre:d.nombre, ambito:d.ambito},"Festivo añadido"); return;
   }
 });
+
+/* ============ Inicio y navegación ============ */
+function irA(modulo){
+  vista.modulo = modulo; vista.emp=null; vista.sim={}; vista.regEdit=null;
+  const h = modulo ? "#"+modulo : "";
+  if(location.hash !== h) history.pushState(null, "", h || location.pathname);
+  render(); window.scrollTo(0,0);
+}
+window.addEventListener("popstate", ()=>{ const m=location.hash.slice(1); vista.modulo = ["vacaciones","horario"].includes(m) ? m : null; if(vista.sesion && S) render(); });
+const volverInicio = () => `<button class="enlace volver" data-a="inicio">‹ Inicio</button>`;
+const ICONO = {
+  vacaciones: `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M6 19h36" stroke="currentColor" stroke-width="3.5"/><path d="M16 5v9M32 5v9" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/><rect x="13" y="25" width="9" height="9" rx="2" fill="var(--marca-rojo)"/><rect x="26" y="25" width="9" height="9" rx="2" fill="currentColor" opacity=".35"/></svg>`,
+  horario: `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="25" r="17" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M24 15v11l7 5" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 4h10" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg>`
+};
+function vInicio(){
+  const s = vista.sesion, admin = s.rol==="admin", yo = !admin && emp(s.id);
+  const pend = admin ? S.vac.filter(v=>v.estado==="pendiente").length + S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).length : 0;
+  const puedeHorario = admin || (yo && yo.horario);
+  let subHorario = "Fichajes de la plantilla";
+  if(!admin && puedeHorario){ const ab = S.registro.find(r=>r.emp===s.id && r.fecha===S.hoy && !r.salida); subHorario = ab ? `Dentro desde las ${ab.entrada}` : "Ficha tu entrada y tu salida"; }
+  if(admin){ const dentro = S.registro.filter(r=>r.fecha===S.hoy && !r.salida).length; if(dentro) subHorario = `${dentro} ${dentro===1?"persona dentro":"personas dentro"} ahora`; }
+  const sv = !admin ? saldo(s.id, +S.hoy.slice(0,4)) : null;
+  return `<h1>${admin ? "Administración" : `Hola, ${esc(yo.nombre.split(" ")[0])}`}</h1>
+  <p class="muted">${admin ? "Elige un apartado." : "¿Qué quieres hacer?"}</p>
+  ${bloqueAvisos(admin ? "Te avisaremos cuando alguien pida vacaciones o avise de una cita." : "Te avisaremos cuando te aprueben o rechacen unas vacaciones.", admin)}
+  <div class="modulos">
+    <button class="modulo" data-a="modulo" data-v="vacaciones">${ICONO.vacaciones}<span class="mod-t">Vacaciones${pend?` <span class="globo">${pend}</span>`:""}</span><span class="mod-s">${admin ? "Solicitudes, calendario, ausencias y bajas" : `Te quedan ${n(sv.quedan)} ${sv.quedan===1?"día":"días"}`}</span></button>
+    ${puedeHorario ? `<button class="modulo" data-a="modulo" data-v="horario">${ICONO.horario}<span class="mod-t">Registro horario</span><span class="mod-s">${subHorario}</span></button>` : ""}
+  </div>`;
+}
+
+/* ============ Registro horario ============ */
+const fh = h => { const m=Math.round((h||0)*60); return `${Math.floor(m/60)} h${m%60?` ${String(m%60).padStart(2,"0")} min`:""}`; };
+const fLarga = s => { const d=D(s); return `${["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"][d.getUTCDay()]}, ${d.getUTCDate()} de ${ML[d.getUTCMonth()]}`; };
+const horaAhora = () => { const d=new Date(); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+function horasDe(r){ if(r.horas!=null) return r.horas; if(r.fecha===S.hoy && r.entrada){ let m=minutos(r.entrada,horaAhora()); return m>0?m/60:0; } return 0; }
+let relojId=null;
+function relojEnMarcha(){ clearInterval(relojId); relojId=setInterval(()=>{ const el=document.getElementById("reloj"); if(!el){ clearInterval(relojId); return; } el.textContent=horaAhora(); }, 10000); }
+const parTxt = r => `${r.entrada} – ${r.salida || "<em>dentro</em>"}`;
+function mesesDe(regs){ const m=new Set(regs.map(r=>r.fecha.slice(0,7))); m.add(S.hoy.slice(0,7)); return [...m].sort(); }
+const nomMes = m => `${ML[+m.slice(5)-1]} ${m.slice(0,4)}`;
+function selMes(meses, actual){
+  const i=meses.indexOf(actual), prev=meses[i-1], next=meses[i+1];
+  return `<div class="mes"><button class="btn sec chico" data-a="regMes" data-v="${prev||""}" ${prev?"":"disabled"} aria-label="Mes anterior">‹</button><h2>${nomMes(actual)}</h2><button class="btn sec chico" data-a="regMes" data-v="${next||""}" ${next?"":"disabled"} aria-label="Mes siguiente">›</button></div>`;
+}
+
+function vHorarioEmp(id){
+  const regs = S.registro.filter(r=>r.emp===id).sort((a,b)=>(a.fecha+a.entrada).localeCompare(b.fecha+b.entrada));
+  const hoyRegs = regs.filter(r=>r.fecha===S.hoy), abierto = hoyRegs.find(r=>!r.salida);
+  const viejos = regs.filter(r=>!r.salida && r.fecha<S.hoy);
+  const meses = mesesDe(regs), mes = meses.includes(vista.regMes) ? vista.regMes : S.hoy.slice(0,7);
+  const delMes = regs.filter(r=>r.fecha.slice(0,7)===mes);
+  const dias = [...new Set(delMes.map(r=>r.fecha))].sort().reverse();
+  const totalMes = delMes.reduce((t,r)=>t+horasDe(r),0), totalHoy = hoyRegs.reduce((t,r)=>t+horasDe(r),0);
+  return `${volverInicio()}<h1>Registro horario</h1>
+  <section class="fichaje" style="margin-top:18px">
+    <p class="muted">${fLarga(S.hoy)}</p>
+    <div class="reloj" id="reloj">${horaAhora()}</div>
+    ${abierto ? `<button class="fichar salida" data-a="fichar" data-v="salida">Fichar salida</button><p class="estado-fichaje">Dentro desde las <strong>${abierto.entrada}</strong></p>`
+              : `<button class="fichar" data-a="fichar" data-v="entrada">Fichar entrada</button><p class="estado-fichaje muted">${hoyRegs.length ? `Hoy llevas ${fh(totalHoy)}` : "Aún no has fichado hoy"}</p>`}
+    <p class="muted small">Se guarda la hora del servidor, no la del móvil.</p>
+  </section>
+  ${viejos.length?`<div class="aviso mal" style="margin-top:18px">Tienes ${viejos.length===1?"una entrada sin salida":"entradas sin salida"}: ${viejos.map(r=>`${fc(r.fecha)} desde las ${r.entrada}`).join("; ")}. Díselo al administrador para que la corrija.</div>`:""}
+  ${hoyRegs.length?`<section><h2>Hoy</h2><ul class="lista">${hoyRegs.map(r=>`<li><div class="q"><strong>${parTxt(r)}</strong></div><span class="muted">${r.salida?fh(r.horas):"en curso"}</span></li>`).join("")}</ul><p style="margin-top:10px"><strong>Total hoy: ${fh(totalHoy)}</strong></p></section>`:""}
+  <section>${selMes(meses, mes)}
+    <ul class="lista">${dias.map(f=>{ const rs=delMes.filter(r=>r.fecha===f); return `<li><div class="q"><strong>${fc(f)}</strong><span class="muted small">${rs.map(parTxt).join(" · ")}${rs.some(r=>r.origen!=="movil")?" · apuntado o corregido por el administrador":""}</span></div><strong>${fh(rs.reduce((t,r)=>t+horasDe(r),0))}</strong></li>`; }).join("") || `<li class="vacio">No hay fichajes este mes.</li>`}</ul>
+    ${dias.length?`<p style="margin-top:10px"><strong>Total del mes: ${fh(totalMes)}</strong> en ${dias.length} ${dias.length===1?"día":"días"}</p>`:""}
+  </section>`;
+}
+
+function vHorarioAdmin(){
+  const fecha = vista.regFecha || S.hoy, conAcceso = activos().filter(e=>e.horario);
+  const delDia = S.registro.filter(r=>r.fecha===fecha).sort((a,b)=>a.entrada.localeCompare(b.entrada));
+  const viejos = S.registro.filter(r=>!r.salida && r.fecha<S.hoy).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const meses = mesesDe(S.registro), mes = meses.includes(vista.regMes) ? vista.regMes : S.hoy.slice(0,7);
+  const ids = [...new Set([...conAcceso.map(e=>e.id), ...S.registro.filter(r=>r.fecha.slice(0,7)===mes).map(r=>r.emp)])];
+  const ed = vista.regEdit;
+  const filas = [...new Set([...conAcceso.map(e=>e.id), ...delDia.map(r=>r.emp)])].map(eid=>{
+    const rs = delDia.filter(r=>r.emp===eid), e=emp(eid);
+    return `<li><div class="q"><strong>${esc(e?.nombre||eid)}</strong>
+      ${rs.length ? rs.map(r=>`<span class="small">${parTxt(r)} · ${r.salida?fh(r.horas):"en curso"}${r.origen!=="movil"?` · <span class="muted">${r.origen==="admin"?"apuntado":"corregido"}</span>`:""} <button class="enlace" data-a="regCorregir" data-id="${r.id}">Corregir</button></span>${r.nota?`<span class="muted small">${esc(r.nota)}</span>`:""}`).join("") : `<span class="muted small">Sin fichajes</span>`}</div>
+      <div class="acciones">${rs.some(r=>!r.salida)?`<span class="chip ok">Dentro</span>`:""}<button class="btn sec chico" data-a="regNuevo" data-emp="${eid}" data-f="${fecha}">Añadir</button></div></li>`;
+  }).join("");
+  const form = ed ? `<section><div class="bloque"><h2>${ed.id?"Corregir fichaje":"Apuntar fichaje"}</h2>
+    ${ed.id?`<p class="muted small">Queda constancia de las horas que había antes en la nota del fichaje.</p>`:""}
+    <form data-f="registro" style="margin-top:12px"><div class="fila">
+      <label class="campo"><span>Empleado</span><select name="emp" required ${ed.id?"disabled":""}><option value="">Elige…</option>${activos().map(e=>`<option value="${e.id}" ${e.id===ed.emp?"selected":""}>${esc(e.nombre)}</option>`).join("")}</select>${ed.id?`<input type="hidden" name="emp" value="${ed.emp}">`:""}</label>
+      <label class="campo"><span>Día</span><input type="date" name="fecha" value="${ed.fecha||fecha}" required></label>
+      <label class="campo"><span>Entrada</span><input type="time" name="entrada" value="${ed.entrada||""}" required></label>
+      <label class="campo"><span>Salida</span><input type="time" name="salida" value="${ed.salida||""}"></label>
+    </div>
+    <label class="campo" style="margin-top:14px"><span>Nota ${ed.id?"(motivo de la corrección)":"(opcional)"}</span><input type="text" name="nota" ${ed.id?'required placeholder="Por ejemplo: olvidó fichar la salida"':""}></label>
+    <div id="errReg" style="margin-top:12px"></div>
+    <div class="acciones" style="margin-top:12px"><button class="btn">${ed.id?"Guardar corrección":"Apuntar fichaje"}</button><button type="button" class="enlace" data-a="regCancelar">Cancelar</button>${ed.id?`<button type="button" class="enlace rojo" data-a="regBorrar" data-id="${ed.id}" style="margin-left:auto">Borrar fichaje</button>`:""}</div>
+    </form></div></section>` : "";
+  return `${volverInicio()}<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Registro horario</h1><p class="muted">${conAcceso.length} ${conAcceso.length===1?"persona ficha":"personas fichan"}</p></div><button class="btn chico" data-a="regNuevo" data-f="${fecha}">Apuntar fichaje</button></div>
+  ${viejos.length?`<div class="aviso mal" style="margin-top:16px"><strong>Fichajes sin salida:</strong> ${viejos.map(r=>`${esc((emp(r.emp)?.nombre||"").split(" ").slice(0,2).join(" "))}, ${fc(r.fecha)} desde las ${r.entrada} <button class="enlace" data-a="regCorregir" data-id="${r.id}">Corregir</button>`).join("; ")}</div>`:""}
+  ${form}
+  <section><div class="mes"><button class="btn sec chico" data-a="regDia" data-v="${mas(fecha,-1)}" aria-label="Día anterior">‹</button><h2 style="text-transform:none">${fLarga(fecha)}${fecha.slice(0,4)!==S.hoy.slice(0,4)?" "+fecha.slice(0,4):""}</h2><button class="btn sec chico" data-a="regDia" data-v="${mas(fecha,1)}" ${fecha>=S.hoy?"disabled":""} aria-label="Día siguiente">›</button>${fecha!==S.hoy?`<button class="enlace" data-a="regDia" data-v="${S.hoy}">Hoy</button>`:""}</div>
+    <ul class="lista">${filas || `<li class="vacio">Nadie tiene acceso al registro horario todavía. Dale acceso abajo, en "Quién ficha".</li>`}</ul></section>
+  <section>${selMes(meses, mes)}
+    <div style="overflow-x:auto"><table class="tabla"><thead><tr><th>Empleado</th><th class="num">Días</th><th class="num">Horas</th></tr></thead><tbody>
+    ${ids.map(eid=>{ const rs=S.registro.filter(r=>r.emp===eid && r.fecha.slice(0,7)===mes); const d=new Set(rs.map(r=>r.fecha)).size; return `<tr style="cursor:default"><td>${esc(emp(eid)?.nombre||eid)}</td><td class="num">${d}</td><td class="num"><strong>${fh(rs.reduce((t,r)=>t+horasDe(r),0))}</strong></td></tr>`; }).join("") || `<tr><td colspan="3" class="muted">Sin fichajes este mes.</td></tr>`}
+    </tbody></table></div></section>
+  <section><h2>Quién ficha</h2><p class="muted small" style="margin-bottom:10px">Solo las personas marcadas ven el botón de Registro horario en su app.</p>
+    <ul class="lista">${activos().map(e=>`<li style="align-items:center"><div class="q"><strong>${esc(e.nombre)}</strong></div>${e.horario?`<span class="chip ok">Ficha</span><button class="enlace rojo" data-a="regAcceso" data-id="${e.id}" data-v="0">Quitar acceso</button>`:`<button class="btn sec chico" data-a="regAcceso" data-id="${e.id}" data-v="1">Dar acceso</button>`}</li>`).join("")}</ul></section>`;
+}
 
 /* ============ Avisos al móvil ============ */
 const avisosListos = () => FIREBASE && typeof FIREBASE === "object" && VAPID && VAPID.indexOf("PEGA_AQUI") !== 0;
@@ -930,6 +1072,7 @@ async function activarAvisos(silencioso){
 /* ============ Arranque ============ */
 (async function(){
   try{ const t=localStorage.getItem(CLAVE_SESION); if(t) vista.sesion=JSON.parse(t); }catch(e){}
+  { const m=location.hash.slice(1); if(["vacaciones","horario"].includes(m)) vista.modulo=m; }
   render();
   if(vista.sesion && !vista.sesion.cambiarPin){
     try{ await recargar(); render(); if(avisosListos() && soportaAvisos() && Notification.permission==="granted" && avisosGuardados()) activarAvisos(true); }

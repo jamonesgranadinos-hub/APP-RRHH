@@ -20,10 +20,12 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-12 b';
+const VERSION_SERVIDOR = '2026-11-12 c';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
-const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos' };
+const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario' };
+const ORIGEN_REG = { movil: 'Fichado en el móvil', admin: 'Apuntado por el administrador', corregido: 'Corregido por el administrador' };
+const ORIGEN_REG_I = Object.fromEntries(Object.entries(ORIGEN_REG).map(([k, v]) => [v, k]));
 
 const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app' };
 const ESTADO = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
@@ -199,7 +201,7 @@ function leerTodo_() {
   const empleados = [], inicial = {};
   tabla_(HOJA.emp).filas.forEach(f => {
     empleados.push({ id: f[0], nombre: f[1], dni: normDni_(f[2]), pinCambiado: String(f[4]).trim() === 'Sí',
-      activo: String(f[5]).trim() !== 'No', salida: fecha_(f[7]) });
+      activo: String(f[5]).trim() !== 'No', salida: fecha_(f[7]), horario: String(f[9] || '').trim() === 'Sí' });
     if (f[6] !== '' && f[6] != null) inicial[f[0]] = Number(f[6]);
   });
   const vac = tabla_(HOJA.vac).filas.map(f => {
@@ -286,7 +288,8 @@ const EMP_ = {
     const D = leerTodo_(), id = ses.id, yo = D.empleados.find(e => e.id === id);
     if (!yo || !yo.activo) throw new Error('Este usuario ya no tiene acceso a la app.');
     return { hoy: hoy_(), cfg: CFG, festivos: D.festivos,
-      empleados: [{ id: yo.id, nombre: yo.nombre, pinCambiado: yo.pinCambiado, activo: true }],
+      empleados: [{ id: yo.id, nombre: yo.nombre, pinCambiado: yo.pinCambiado, activo: true, horario: yo.horario }],
+      registro: yo.horario ? leerRegistro_(sumar_(hoy_(), -70)).filter(r => r.emp === id) : [],
       inicial: D.inicial[id] != null ? { [id]: D.inicial[id] } : {},
       vac: D.vac.filter(v => v.emp === id), extras: D.extras.filter(x => x.emp === id),
       aus: D.aus.filter(a => a.emp === id && a.tipo === 'horas' && a.origen === 'empleado') };
@@ -323,6 +326,23 @@ const EMP_ = {
     avisar_('admin', 'Aviso de cita', nombreCorto_(ses.id) + ' sale el ' + fechaCorta_(desde) + ' de ' + salida + ' a ' + vuelta);
   },
   registrarAviso(ses, p) { guardarDispositivo_(p.fcm, ses.id); },
+  fichar(ses, p) {
+    const yo = tabla_(HOJA.emp).filas.find(f => f[0] === ses.id);
+    if (!yo || String(yo[9] || '').trim() !== 'Sí') throw new Error('No tienes acceso al registro horario.');
+    const ahora = new Date(), fecha = hoy_(), hora = Utilities.formatDate(ahora, zona_(), 'HH:mm');
+    const t = tabla_(hojaRegistro_().getName());
+    const abiertos = t.filas.filter(f => f[2] === ses.id && !hora_(f[6])).sort((a, b) => (fecha_(b[4]) + hora_(b[5])).localeCompare(fecha_(a[4]) + hora_(a[5])));
+    const abiertoHoy = abiertos.find(f => fecha_(f[4]) === fecha);
+    if (p.tipo === 'salida') {
+      if (!abiertoHoy) throw new Error('No tienes ninguna entrada abierta hoy. Ficha primero la entrada.');
+      if (minutos_(hora_(abiertoHoy[5]), hora) < 1) throw new Error('Acabas de fichar la entrada. Espera un minuto para fichar la salida.');
+      t.hoja.getRange(abiertoHoy.fila, 7, 1, 2).setValues([["'" + hora, horas_(hora_(abiertoHoy[5]), hora)]]);
+      return { hora };
+    }
+    if (abiertoHoy) throw new Error('Ya tienes una entrada abierta desde las ' + hora_(abiertoHoy[5]) + '. Ficha la salida.');
+    t.hoja.appendRow([nuevoId_('R'), Number(fecha.slice(0, 4)), ses.id, nombre_(ses.id), fecha, "'" + hora, '', '', ORIGEN_REG.movil, '', fecha, '']);
+    return { hora };
+  },
   anularAviso(ses, p) {
     const r = buscar_(HOJA.aus, p.id);
     if (r.f[2] !== ses.id || r.f[4] !== TIPO.horas || String(r.f[14]).trim() !== 'Sí' || fecha_(r.f[5]) < hoy_()) throw new Error('No puedes anular ese aviso.');
@@ -333,7 +353,23 @@ const EMP_ = {
 /* ================= Acciones del administrador ================= */
 
 const ADMIN_ = {
-  estado() { const D = leerTodo_(); return Object.assign({ hoy: hoy_(), cfg: CFG }, D); },
+  estado() { const D = leerTodo_(); return Object.assign({ hoy: hoy_(), cfg: CFG, registro: leerRegistro_(sumar_(hoy_(), -400)) }, D); },
+  registroAcceso(ses, p) { const r = buscar_(HOJA.emp, p.emp); r.hoja.getRange(r.f.fila, 10).setValue(p.si ? 'Sí' : 'No'); },
+  registroGuardar(ses, p) {
+    const fecha = fechaValida_(p.fecha), entrada = horaValida_(p.entrada), salida = p.salida ? horaValida_(p.salida) : '';
+    const nota = texto_(p.nota);
+    if (p.id) {
+      const r = buscar_(HOJA.reg, p.id), antes = [hora_(r.f[5]), hora_(r.f[6])];
+      const cambio = 'Antes: ' + antes[0] + '–' + (antes[1] || 'sin salida');
+      const notaFinal = [String(r.f[9] || ''), cambio, nota].filter(Boolean).join(' · ');
+      r.hoja.getRange(r.f.fila, 5, 1, 8).setValues([[fecha, "'" + entrada, salida ? "'" + salida : '', salida ? horas_(entrada, salida) : '',
+        ORIGEN_REG.corregido, notaFinal, r.f[10], hoy_()]]);
+    } else {
+      hojaRegistro_().appendRow([nuevoId_('R'), Number(fecha.slice(0, 4)), p.emp, nombre_(p.emp), fecha, "'" + entrada, salida ? "'" + salida : '',
+        salida ? horas_(entrada, salida) : '', ORIGEN_REG.admin, nota, hoy_(), '']);
+    }
+  },
+  registroBorrar(ses, p) { borrarFila_(HOJA.reg, p.id); },
   aprobar(ses, p) {
     const r = buscar_(HOJA.vac, p.id);
     r.hoja.getRange(r.f.fila, 10, 1, 3).setValues([[ESTADO.aprobada, r.f[10], hoy_()]]);
@@ -379,7 +415,7 @@ const ADMIN_ = {
     if (t.filas.some(f => normDni_(f[2]) === dni)) throw new Error('Ya hay un empleado con ese DNI.');
     const n = t.filas.reduce((m, f) => Math.max(m, Number(String(f[0]).replace(/\D/g, '')) || 0), 0) + 1;
     const id = 'E' + String(n).padStart(2, '0');
-    t.hoja.appendRow([id, texto_(p.nombre, 120).toUpperCase(), dni, "'" + CFG.PIN_PROV, 'No', 'Sí', '', '', '']);
+    t.hoja.appendRow([id, texto_(p.nombre, 120).toUpperCase(), dni, "'" + CFG.PIN_PROV, 'No', 'Sí', '', '', '', 'No']);
     return { id };
   },
   resetPin(ses, p) {
@@ -420,6 +456,28 @@ const ADMIN_ = {
     if (f) t.hoja.deleteRow(f.fila);
   }
 };
+
+/* ================= Registro horario ================= */
+
+/** Devuelve la pestaña del registro horario; si no existe, la crea con sus columnas. */
+function hojaRegistro_() {
+  const ss = SpreadsheetApp.getActive();
+  let h = ss.getSheetByName(HOJA.reg);
+  if (!h) {
+    h = ss.insertSheet(HOJA.reg);
+    h.getRange(1, 1, 1, 12).setValues([['ID', 'Año', 'ID empleado', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Horas', 'Origen', 'Nota', 'Registrado el', 'Modificado el']]).setFontWeight('bold');
+    h.setFrozenRows(1);
+  }
+  return h;
+}
+/** Horas entre dos horas "HH:mm" (si la salida es menor, se entiende que es al día siguiente). */
+function horas_(entrada, salida) { let m = minutos_(entrada, salida); if (m < 0) m += 1440; return Math.round(m / 60 * 100) / 100; }
+function leerRegistro_(desde) {
+  hojaRegistro_();
+  return tabla_(HOJA.reg).filas.map(f => ({ id: String(f[0]), emp: f[2], fecha: fecha_(f[4]), entrada: hora_(f[5]), salida: hora_(f[6]),
+    horas: f[7] === '' ? null : Number(f[7]), origen: ORIGEN_REG_I[f[8]] || 'movil', nota: f[9] || '' }))
+    .filter(r => r.fecha >= desde);
+}
 
 /* ================= Avisos al móvil ================= */
 
