@@ -211,6 +211,14 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .fichar.salida{background:var(--marca-rojo)}
 .fichar[disabled]{opacity:.6}
 .estado-fichaje{margin:14px 0 6px;font-size:18px}
+.opciones{display:grid;gap:10px;margin-top:6px}
+.opcion{display:flex;gap:12px;align-items:flex-start;cursor:pointer;padding:12px 14px;border:1.5px solid var(--linea);border-radius:var(--r);background:var(--papel)}
+.opcion:has(input:checked){border-color:var(--pino);background:var(--pino-claro)}
+.opcion input{width:22px;height:22px;margin:2px 0 0;accent-color:var(--pino);flex:none}
+.opcion span{display:flex;flex-direction:column;gap:2px}
+.opcion small{color:var(--pizarra);font-size:14px}
+.fila-emp{border:0;border-radius:0;background:none;padding:14px 4px;align-items:center}
+.fila-emp:has(input:checked){background:none}
 .version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
 .toast{overflow-wrap:anywhere;position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
@@ -231,7 +239,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-12 k</p>
+<p class="version">Versión 2026-11-12 l</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -313,7 +321,7 @@ function saldo(id, a=ANIO){
   const base = a===ANIO_INICIO ? Number(S.inicial[id]||0) : DIAS_ANUALES;
   const arrastre = a>ANIO_INICIO ? sobrante(id, a-1) : 0;   // días sin gastar del año anterior
   const total = base + extra + arrastre;
-  const apro = vs.filter(v=>v.estado==="aprobada");
+  const apro = vs.filter(v=>v.estado==="aprobada" && v.origen!=="regalo");   // los días regalados no se descuentan
   const fijos = apro.filter(v=>v.origen==="admin").reduce((a,v)=>a+valor(v),0);
   const pedidos = apro.filter(v=>v.origen!=="admin").reduce((a,v)=>a+valor(v),0);
   const pend = vs.filter(v=>v.estado==="pendiente").reduce((a,v)=>a+valor(v),0);
@@ -342,7 +350,7 @@ function explicar(desde,hasta,medio,franja=vista.franja,anterior=false){
     return {dias:0.5,texto:`Medio día por la ${franja} el ${fc(desde)}.`};
   }
   if(!l.length) return {error:"En esas fechas no hay ningún día laborable."};
-  let t = `Son ${dd(l.length)} laborables.`;
+  let t = l.length===1 ? "Es 1 día laborable." : `Son ${l.length} días laborables.`;
   if(fs.length) t += ` No cuentan ${fs.map(f=>`el ${fl(f.fecha)} (${f.nombre.replace(/ \(.*\)/,"")})`).join(", ")}, ${fs.length>1?"que son festivos":"que es festivo"}.`;
   return {dias:l.length, texto:t};
 }
@@ -363,11 +371,11 @@ function casillas(s){
     <li><span class="muestra c-libre"></span>Libres para pedir <b>${n(Math.max(0,s.pedir))}</b></li>
   </ul>`;
 }
-const chipEstado = v => v.origen==="admin" ? `<span class="chip fijo">Fijo</span>` :
+const chipEstado = v => v.origen==="admin" ? `<span class="chip fijo">Fijo</span>` : v.origen==="regalo" ? `<span class="chip ok">Regalado</span>` :
   v.estado==="aprobada" ? `<span class="chip ok">Aprobada</span>` :
   v.estado==="pendiente" ? `<span class="chip pend">Pendiente</span>` : `<span class="chip no">Rechazada</span>`;
 const lineaVac = (v, acciones="") => `<li><div class="q"><strong>${rango(v.desde,v.hasta)}</strong>
-  <span class="muted small">${v.medio?tMedio(v):dd(valor(v))}${v.origen==="admin"?" · asignados por el administrador":v.origen==="previa"?" · aprobadas antes de la app":""}${anioVac(v)!==+v.desde.slice(0,4)?` · días adelantados, cuentan para ${anioVac(v)}`:""}${v.motivoRechazo?` · Motivo: ${esc(v.motivoRechazo)}`:""}</span></div>
+  <span class="muted small">${v.medio?tMedio(v):dd(valor(v))}${v.origen==="admin"?" · asignados por el administrador":v.origen==="previa"?" · aprobadas antes de la app":v.origen==="dada"?" · dadas por el administrador":v.origen==="regalo"?" · día regalado, no se descuenta":""}${anioVac(v)!==+v.desde.slice(0,4)?` · días adelantados, cuentan para ${anioVac(v)}`:""}${v.motivoRechazo?` · Motivo: ${esc(v.motivoRechazo)}`:""}</span></div>
   <div class="acciones">${chipEstado(v)}${acciones}</div></li>`;
 
 function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("ver"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("ver"),2600); }
@@ -478,8 +486,8 @@ function listaFestivos(editable){
 /* ============ Administrador ============ */
 function vAdmin(){
   const pend = S.vac.filter(v=>v.estado==="pendiente").length + S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).length;
-  const tabs = [["solicitudes","Solicitudes y avisos",pend],["calendario","Calendario"],["empleados","Empleados"],["ausencias","Ausencias y bajas"],["festivos","Festivos"]];
-  let cuerpo = vista.tab==="solicitudes"?tSolicitudes(): vista.tab==="empleados"?(vista.emp?tFicha(vista.emp):tEmpleados()): vista.tab==="ausencias"?tAusencias(): vista.tab==="calendario"?tCalendario():tFestivos();
+  const tabs = [["solicitudes","Solicitudes y avisos",pend],["calendario","Calendario"],["empleados","Empleados"],["ausencias","Ausencias y bajas"],["dar","Dar días"],["festivos","Festivos"]];
+  let cuerpo = vista.tab==="solicitudes"?tSolicitudes(): vista.tab==="empleados"?(vista.emp?tFicha(vista.emp):tEmpleados()): vista.tab==="ausencias"?tAusencias(): vista.tab==="calendario"?tCalendario(): vista.tab==="dar"?tDarDias():tFestivos();
   return `${volverInicio()}<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1>Vacaciones</h1><p class="muted">Vacaciones de ${ANIO} · ${activos().length} empleados</p></div>${selAnio()}</div>
   <div class="pestanas" role="tablist">${tabs.map(([k,t,c])=>`<button role="tab" data-a="tab" data-v="${k}" aria-selected="${vista.tab===k}">${t}${c?`<span class="globo">${c}</span>`:""}</button>`).join("")}</div>
   <div style="margin-top:24px">${cuerpo}</div>`;
@@ -642,6 +650,26 @@ function tAusencias(){
     <ul class="lista">${lista.map(a=>lineaAus(a,true)).join("")||`<li class="vacio">No hay registros.</li>`}</ul></section>`;
 }
 
+function tDarDias(){
+  return `<p class="muted">Da el mismo día o periodo de vacaciones a varias personas a la vez, por ejemplo un puente o un cierre de la empresa.</p>
+  <form data-f="darDias" style="margin-top:18px">
+    <div class="bloque"><h2>1. Fechas</h2><div class="fila">
+      <label class="campo"><span>Desde</span><input type="date" name="vdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" required></label>
+      <label class="campo"><span>Hasta</span><input type="date" name="vhasta" min="${ANIO}-01-01" max="${ANIO}-12-31"></label></div>
+      <div class="calc" id="calcVarios"><span class="muted small">Si es un solo día, deja "Hasta" vacío.</span></div></div>
+    <div class="bloque" style="margin-top:18px"><h2>2. ¿Se descuenta de sus vacaciones?</h2>
+      <div class="opciones">
+        <label class="opcion"><input type="radio" name="tipo" value="admin" required><span><strong>Sí, como día fijo</strong><small>Se resta de sus días y cuenta dentro de los ${DIAS_FIJOS} que fijas tú.</small></span></label>
+        <label class="opcion"><input type="radio" name="tipo" value="dada"><span><strong>Sí, de los que puede pedir</strong><small>Se resta de sus días, pero no cuenta como día fijo.</small></span></label>
+        <label class="opcion"><input type="radio" name="tipo" value="regalo"><span><strong>No, es un día regalado</strong><small>Libra ese día y no se le resta nada.</small></span></label>
+      </div></div>
+    <div class="bloque" style="margin-top:18px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">3. ¿A quién?</h2>
+      <span class="acciones"><button type="button" class="enlace" data-a="marcarTodos" data-v="1">Marcar a todos</button><button type="button" class="enlace" data-a="marcarTodos" data-v="0">Desmarcar</button></span></div>
+      <ul class="lista" style="margin-top:12px">${activos().map(e=>`<li style="padding:0"><label class="opcion fila-emp"><input type="checkbox" name="emp" value="${e.id}"><span>${esc(e.nombre)}</span></label></li>`).join("")}</ul></div>
+    <div id="errDar" style="margin-top:14px"></div>
+    <button class="btn" style="margin-top:14px">Dar los días</button>
+  </form>`;
+}
 function tFestivos(){
   const fa = S.festivos.filter(f=>delAnio(f.fecha));
   const lab = fa.filter(f=>{const w=D(f.fecha).getUTCDay(); return w>0&&w<6;}).length;
@@ -713,7 +741,7 @@ function tCalendario(){
     <li class="muted">Total trabajando: no cuenta vacaciones aprobadas, bajas, permisos ni faltas; medio día resta 0,5. Las pendientes no restan.</li>
   </ul>
   <section><h2>Vacaciones aprobadas en ${ML[m-1]}</h2>
-  <ul class="lista">${enMes.map(v=>`<li><div class="q"><strong>${esc(emp(v.emp).nombre)}</strong><span class="muted small">${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}${v.origen==="admin"?" · días fijos":v.origen==="previa"?" · aprobadas antes de la app":""}</span></div></li>`).join("")||`<li class="vacio">Nadie tiene vacaciones aprobadas este mes.</li>`}</ul></section>`;
+  <ul class="lista">${enMes.map(v=>`<li><div class="q"><strong>${esc(emp(v.emp).nombre)}</strong><span class="muted small">${rango(v.desde,v.hasta)} · ${v.medio?tMedio(v).toLowerCase():dd(valor(v))}${v.origen==="admin"?" · días fijos":v.origen==="previa"?" · aprobadas antes de la app":v.origen==="dada"?" · dadas por el administrador":v.origen==="regalo"?" · día regalado":""}</span></div></li>`).join("")||`<li class="vacio">Nadie tiene vacaciones aprobadas este mes.</li>`}</ul></section>`;
 }
 
 /* ============ Conexión con la hoja ============ */
@@ -804,6 +832,7 @@ document.addEventListener("click", ev=>{
     case "medio": vista.medio=b.dataset.v==="1"; vista.sim={desde:vista.sim.desde}; render(); break;
     case "anular": hacer("anular",{id},"Solicitud anulada"); break;
     case "modulo": irA(b.dataset.v); break;
+    case "marcarTodos": document.querySelectorAll("[data-f=darDias] input[name=emp]").forEach(c=>c.checked=b.dataset.v==="1"); break;
     case "inicio": irA(null); break;
     case "fichar": { b.disabled=true; const tipo=b.dataset.v; api("fichar",{tipo}).then(async j=>{ await recargar(); render(); toast(`${tipo==="entrada"?"Entrada":"Salida"} fichada a las ${j.hora}`); }).catch(e=>{ toast(e.message||"No se ha podido fichar"); render(); }); break; }
     case "regDia": vista.regFecha=b.dataset.v; vista.regEdit=null; render(); break;
@@ -832,6 +861,7 @@ document.addEventListener("keydown", ev=>{ if(ev.key==="Enter" && ev.target.matc
 document.addEventListener("change", ev=>{
   const t=ev.target;
   if(t.matches("[data-sim]")){ vista.sim[t.name]=t.value; if(t.name==="desde"&&vista.sim.hasta&&vista.sim.hasta<t.value) vista.sim.hasta=t.value; if(t.name==="fdesde"&&vista.sim.fhasta&&vista.sim.fhasta<t.value) vista.sim.fhasta=t.value; if(t.name==="pdesde"&&vista.sim.phasta&&vista.sim.phasta<t.value) vista.sim.phasta=t.value; rerenderConFoco(t.name); }
+  if(t.name==="vdesde"||t.name==="vhasta"){ const f=t.form, de=f.vdesde.value, ha=f.vhasta.value||de; if(t.name==="vdesde") f.vhasta.min=de; const c=explicar(de,ha,false); document.getElementById("calcVarios").innerHTML = c.error?`<div class="aviso mal">${c.error}</div>`:c.texto?`<div class="aviso ok">${c.texto}</div>`:""; }
   if(t.name==="abierta"){ const h=t.form.querySelector("[name=hasta]"); h.disabled=t.checked; h.required=!t.checked; if(t.checked) h.value=""; }
   if(t.matches("[data-a=filtroAus]")){ vista.filtroAus=t.value; render(); }
 });
@@ -914,6 +944,17 @@ document.addEventListener("submit", async ev=>{
     if(!d.emp){ err("errReg","Elige el empleado."); return; }
     const e=vista.regEdit||{};
     if(await hacer("registroGuardar",{id:e.id||"", emp:d.emp, fecha:d.fecha, entrada:d.entrada, salida:d.salida||"", nota:d.nota||""}, e.id?"Fichaje corregido":"Fichaje apuntado")){ vista.regEdit=null; vista.regFecha=d.fecha; render(); }
+    return;
+  }
+  if(tipo==="darDias"){
+    const fd=new FormData(f), emps=fd.getAll("emp"), desde=d.vdesde, hasta=d.vhasta||d.vdesde;
+    const c=explicar(desde,hasta,false); if(c.error){ err("errDar",c.error); return; }
+    if(!emps.length){ err("errDar","Marca al menos a una persona."); return; }
+    try{
+      const j = await api("vacacionesVarios",{emps, desde, hasta, tipo:d.tipo});
+      await recargar(); render();
+      toast(`Días dados a ${j.creadas} ${j.creadas===1?"persona":"personas"}${j.saltados.length?`. No se han dado a ${j.saltados.join(", ")} porque ${j.saltados.length===1?"ya tenía":"ya tenían"} algo esos días`:""}`);
+    }catch(e2){ err("errDar", e2.message); }
     return;
   }
   if(tipo==="fest"){

@@ -20,14 +20,14 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-12 d';
+const VERSION_SERVIDOR = '2026-11-12 e';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario' };
 const ORIGEN_REG = { movil: 'Fichado en el móvil', admin: 'Apuntado por el administrador', corregido: 'Corregido por el administrador' };
 const ORIGEN_REG_I = Object.fromEntries(Object.entries(ORIGEN_REG).map(([k, v]) => [v, k]));
 
-const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app' };
+const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app', dada: 'Dada por el administrador', regalo: 'Día regalado' };
 const ESTADO = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
 const TIPO   = { horas: 'Ausencia por horas', baja: 'Baja', permiso: 'Permiso', falta: 'Falta puntual', retraso: 'Retraso' };
 const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
@@ -194,7 +194,8 @@ function buscar_(nombre, id) {
   if (!f) throw new Error('No encuentro ese registro. Puede que alguien lo haya borrado; recarga la app.');
   return { hoja: t.hoja, f };
 }
-function nuevoId_(letra) { return letra + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase(); }
+let CONTADOR_ID_ = 0;
+function nuevoId_(letra) { return letra + Date.now().toString(36).toUpperCase() + (CONTADOR_ID_++).toString(36).toUpperCase() + Math.floor(Math.random() * 1296).toString(36).toUpperCase(); }
 function nombre_(id) { const f = tabla_(HOJA.emp).filas.find(x => x[0] === id); return f ? f[1] : ''; }
 
 function leerTodo_() {
@@ -238,7 +239,7 @@ function saldo_(D, id, a) {
   const base = a === CFG.ANIO_INICIO ? Number(D.inicial[id] || 0) : CFG.DIAS_ANUALES;
   const arrastre = a > CFG.ANIO_INICIO ? sobrante_(D, id, a - 1) : 0;
   const total = base + extra + arrastre;
-  const apro = vs.filter(v => v.estado === 'aprobada');
+  const apro = vs.filter(v => v.estado === 'aprobada' && v.origen !== 'regalo');   // los días regalados no se descuentan
   const fijos = apro.filter(v => v.origen === 'admin').reduce((t, v) => t + v.dias, 0);
   const pedidos = apro.filter(v => v.origen !== 'admin').reduce((t, v) => t + v.dias, 0);
   const pend = vs.filter(v => v.estado === 'pendiente').reduce((t, v) => t + v.dias, 0);
@@ -387,6 +388,24 @@ const ADMIN_ = {
     const res = enviarAhora_('admin', 'Aviso de prueba', 'Si ves esto, los avisos de la app funcionan.');
     if (res.errores.length && !res.enviados) throw new Error('No se ha podido enviar: ' + res.errores[0]);
     return { enviados: res.enviados };
+  },
+  /** Da el mismo periodo de vacaciones a varios empleados a la vez (puentes, cierres...). */
+  vacacionesVarios(ses, p) {
+    const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = fechaValida_(p.hasta || p.desde);
+    const dias = calcularDias_(desde, hasta, false, D.festivos);
+    const origen = ['admin', 'dada', 'regalo'].indexOf(p.tipo) >= 0 ? p.tipo : null;
+    if (!origen) throw new Error('Elige si se descuenta o es un día regalado.');
+    const emps = (p.emps || []).filter(id => D.empleados.some(e => e.id === id && e.activo));
+    if (!emps.length) throw new Error('Elige al menos un empleado.');
+    const filas = [], saltados = [];
+    emps.forEach(id => {
+      if (solapa_(D, id, desde, hasta, null)) { saltados.push(nombreCorto_(id)); return; }
+      filas.push(filaVac_({ id: nuevoId_('V'), emp: id, desde, hasta, medio: false, dias, origen, estado: 'aprobada' }));
+      avisar_(id, origen === 'regalo' ? 'Día libre' : 'Te han dado vacaciones',
+        (origen === 'regalo' ? 'Libras ' : 'Tienes vacaciones ') + periodo_(desde, hasta, null) + (origen === 'regalo' ? '. No se descuenta de tus días.' : '.'));
+    });
+    if (filas.length) { const h = hoja_(HOJA.vac); h.getRange(h.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas); }
+    return { creadas: filas.length, saltados };
   },
   vacacionesAprobadas(ses, p) {   // días fijos o vacaciones aprobadas antes de la app
     const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = p.medio ? desde : fechaValida_(p.hasta || p.desde);
