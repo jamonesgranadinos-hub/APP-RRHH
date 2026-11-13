@@ -190,7 +190,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .plan tfoot td.fin{color:var(--pizarra);font-weight:400}
 .plan i.m1{right:50%}.plan i.m2{left:50%}
 .carga{position:fixed;top:0;left:0;right:0;height:3px;z-index:20;overflow:hidden;opacity:0;transition:opacity .2s}
-.cargando .carga{opacity:1}
+.cargando .carga,.sincronizando .carga{opacity:1}
 .carga i{position:absolute;top:0;bottom:0;width:40%;background:var(--azafran);animation:carga 1s linear infinite}
 @keyframes carga{from{left:-40%}to{left:100%}}
 .cargando main{pointer-events:none;opacity:.7}
@@ -239,7 +239,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-12 l</p>
+<p class="version">Versión 2026-11-13 m</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -745,8 +745,10 @@ function tCalendario(){
 }
 
 /* ============ Conexión con la hoja ============ */
-async function api(accion, datos={}){
-  document.body.classList.add("cargando");
+// silencioso: se actualiza por detrás, sin bloquear la pantalla (solo la barrita de arriba)
+async function api(accion, datos={}, silencioso=false){
+  const clase = silencioso ? "sincronizando" : "cargando";
+  document.body.classList.add(clase);
   try{
     let r;
     try{
@@ -758,10 +760,18 @@ async function api(accion, datos={}){
       throw new Error(j.mensaje || j.error || "No se ha podido guardar.");
     }
     return j;
-  } finally { document.body.classList.remove("cargando"); }
+  } finally { document.body.classList.remove(clase); }
 }
-async function recargar(){
-  const j = await api("estado");
+const CLAVE_DATOS = "rrhh-datos";
+let ultimaCarga = 0;
+async function recargar(silencioso=false){
+  const j = await api("estado", {}, silencioso);
+  aplicarEstado(j);
+}
+/** Mete en la app los datos que manda la hoja y los guarda en el móvil para abrir rápido la próxima vez. */
+function aplicarEstado(j, desdeCopia){
+  if(!desdeCopia){ ultimaCarga = Date.now(); try{ localStorage.setItem(CLAVE_DATOS, JSON.stringify({quien: vista.sesion && vista.sesion.token, j})); }catch(e){} }
+  j = JSON.parse(JSON.stringify(j));
   const c = j.cfg || {};
   ANIO_INICIO = c.ANIO_INICIO ?? ANIO_INICIO; DIAS_ANUALES = c.DIAS_ANUALES ?? DIAS_ANUALES; DIAS_FIJOS = c.DIAS_FIJOS ?? DIAS_FIJOS; PIN_PROV = c.PIN_PROV ?? PIN_PROV;
   const titulo = t => String(t||"").toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(m,a,l)=>a+l.toUpperCase());
@@ -772,13 +782,29 @@ async function recargar(){
   if(vista.sesion && vista.sesion.rol==="emp"){ vista.sesion.id = S.empleados[0]?.id; guardarSesion(); }
 }
 function guardarSesion(){ try{ vista.sesion ? localStorage.setItem(CLAVE_SESION, JSON.stringify(vista.sesion)) : localStorage.removeItem(CLAVE_SESION); }catch(e){} }
-function cerrarSesion(){ vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null, modulo:null, regEdit:null}; S=null; guardarSesion(); if(location.hash) history.replaceState(null,"",location.pathname); render(); }
+function borrarCopia(){ try{ localStorage.removeItem(CLAVE_DATOS); }catch(e){} }
+function copiaGuardada(){ try{ const c=JSON.parse(localStorage.getItem(CLAVE_DATOS)||"null"); return c && vista.sesion && c.quien===vista.sesion.token ? c.j : null; }catch(e){ return null; } }
+/** ¿Hay algo a medio escribir en pantalla? Entonces no se redibuja al llegar datos nuevos por detrás. */
+function hayAlgoEscrito(){
+  const a=document.activeElement; if(a && a.closest && a.closest("main form")) return true;
+  return [...document.querySelectorAll("main form input, main form select, main form textarea")].some(el =>
+    el.type==="checkbox"||el.type==="radio" ? el.checked!==el.defaultChecked :
+    el.tagName==="SELECT" ? [...el.options].some(o=>o.selected!==o.defaultSelected) :
+    el.type!=="hidden" && el.value!==el.defaultValue);
+}
+function refrescarPorDetras(minSegundos=0){
+  if(!vista.sesion || !S || vista.sesion.cambiarPin || document.body.classList.contains("cargando") || document.body.classList.contains("sincronizando")) return;
+  if(Date.now()-ultimaCarga < minSegundos*1000) return;
+  recargar(true).then(()=>{ if(!hayAlgoEscrito() && !document.body.classList.contains("cargando")) render(); }).catch(()=>{});
+}
+function cerrarSesion(){ borrarCopia(); vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null, modulo:null, regEdit:null}; S=null; guardarSesion(); if(location.hash) history.replaceState(null,"",location.pathname); render(); }
 // Hace una acción en la hoja, vuelve a leer los datos y avisa
 async function hacer(accion, datos, mensaje, despues){
   try{
-    await api(accion, datos);
+    const j = await api(accion, {...datos, conEstado:true});
     if(despues) despues();
-    await recargar(); render(); if(mensaje) toast(mensaje);
+    if(j.datos) aplicarEstado(j.datos); else if(accion==="estado") aplicarEstado(j); else await recargar();
+    render(); if(mensaje) toast(mensaje);
     return true;
   }catch(e){ if(!S) errorCarga(e); else { if(e.message) toast(e.message); render(); } return false; }
 }
@@ -834,7 +860,7 @@ document.addEventListener("click", ev=>{
     case "modulo": irA(b.dataset.v); break;
     case "marcarTodos": document.querySelectorAll("[data-f=darDias] input[name=emp]").forEach(c=>c.checked=b.dataset.v==="1"); break;
     case "inicio": irA(null); break;
-    case "fichar": { b.disabled=true; const tipo=b.dataset.v; api("fichar",{tipo}).then(async j=>{ await recargar(); render(); toast(`${tipo==="entrada"?"Entrada":"Salida"} fichada a las ${j.hora}`); }).catch(e=>{ toast(e.message||"No se ha podido fichar"); render(); }); break; }
+    case "fichar": { b.disabled=true; const tipo=b.dataset.v; api("fichar",{tipo, conEstado:true}).then(async j=>{ if(j.datos) aplicarEstado(j.datos); else await recargar(); render(); toast(`${tipo==="entrada"?"Entrada":"Salida"} fichada a las ${j.hora}`); }).catch(e=>{ toast(e.message||"No se ha podido fichar"); render(); }); break; }
     case "regDia": vista.regFecha=b.dataset.v; vista.regEdit=null; render(); break;
     case "regMes": vista.regMes=b.dataset.v; render(); break;
     case "regNuevo": vista.regEdit={emp:b.dataset.emp||"", fecha:b.dataset.f||vista.regFecha||S.hoy}; render(); document.querySelector("[data-f=registro]")?.scrollIntoView({block:"center"}); break;
@@ -842,7 +868,7 @@ document.addEventListener("click", ev=>{
     case "regCancelar": vista.regEdit=null; render(); break;
     case "regBorrar": { const r=S.registro.find(x=>x.id===id); vista.regEdit=null; hacer("registroBorrar",{id},"Fichaje borrado"); break; }
     case "regAcceso": hacer("registroAcceso",{emp:id, si:b.dataset.v==="1"}, b.dataset.v==="1"?`${nom(id)} ya puede fichar`:`${nom(id)} ya no ficha`); break;
-    case "tab": vista.tab=b.dataset.v; vista.emp=null; vista.sim={}; render(); if(vista.sesion?.rol==="admin") hacer("estado"); break;
+    case "tab": vista.tab=b.dataset.v; vista.emp=null; vista.sim={}; render(); refrescarPorDetras(60); break;
     case "aprobar": hacer("aprobar",{id},`Aprobada: ${nom(v.emp)}, ${rango(v.desde,v.hasta)}`); break;
     case "rech": vista.rechazando=id; render(); document.querySelector('[data-f=rechazar] input').focus(); break;
     case "cancelarRech": vista.rechazando=null; render(); break;
@@ -951,8 +977,9 @@ document.addEventListener("submit", async ev=>{
     const c=explicar(desde,hasta,false); if(c.error){ err("errDar",c.error); return; }
     if(!emps.length){ err("errDar","Marca al menos a una persona."); return; }
     try{
-      const j = await api("vacacionesVarios",{emps, desde, hasta, tipo:d.tipo});
-      await recargar(); render();
+      const j = await api("vacacionesVarios",{emps, desde, hasta, tipo:d.tipo, conEstado:true});
+      if(j.datos) aplicarEstado(j.datos); else await recargar();
+      render();
       toast(`Días dados a ${j.creadas} ${j.creadas===1?"persona":"personas"}${j.saltados.length?`. No se han dado a ${j.saltados.join(", ")} porque ${j.saltados.length===1?"ya tenía":"ya tenían"} algo esos días`:""}`);
     }catch(e2){ err("errDar", e2.message); }
     return;
@@ -1116,12 +1143,16 @@ async function activarAvisos(silencioso){
   { const m=location.hash.slice(1); if(["vacaciones","horario"].includes(m)) vista.modulo=m; }
   render();
   if(vista.sesion && !vista.sesion.cambiarPin){
-    try{ await recargar(); render(); if(avisosListos() && soportaAvisos() && Notification.permission==="granted" && avisosGuardados()) activarAvisos(true); }
+    const copia = copiaGuardada();
+    if(copia){ try{ aplicarEstado(copia, true); render(); }catch(e){ S=null; } }
+    try{ await recargar(!!S); if(!S || !hayAlgoEscrito()) render(); if(avisosListos() && soportaAvisos() && Notification.permission==="granted" && avisosGuardados()) activarAvisos(true); }
     catch(e){ errorCarga(e); }
   }
   if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js"); }catch(e){} }
   // al volver a la app (por ejemplo, desde un aviso), traer los datos al día
-  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && vista.sesion && S && !vista.sesion.cambiarPin && !document.body.classList.contains("cargando")) recargar().then(render).catch(()=>{}); });
+  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") refrescarPorDetras(20); });
+  // si la app se queda abierta, se pone al día cada 2 minutos sin molestar
+  setInterval(()=>{ if(document.visibilityState==="visible") refrescarPorDetras(110); }, 120000);
 })();
 </script>
 </body>

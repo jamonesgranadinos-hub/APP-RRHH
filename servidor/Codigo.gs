@@ -20,7 +20,7 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-12 e';
+const VERSION_SERVIDOR = '2026-11-13 a';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario' };
@@ -57,18 +57,22 @@ function despachar_(p) {
   if (p.accion === 'salir') { cerrarSesion_(p.token); quitarDispositivo_(p.fcm); return { ok: true }; }
   const ses = sesion_(p.token);
   if (!ses) return { ok: false, error: 'SESION', mensaje: 'La sesión ha caducado. Vuelve a entrar.' };
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  const f = ses.rol === 'admin' ? ADMIN_[p.accion] : EMP_[p.accion];
+  if (!f) throw new Error('Acción no permitida.');
+  // leer no necesita esperar a nadie; solo las escrituras van de una en una
+  const soloLectura = p.accion === 'estado';
+  const lock = soloLectura ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(20000);
   let r;
   COLA_AVISOS_ = [];
   try {
-    const f = ses.rol === 'admin' ? ADMIN_[p.accion] : EMP_[p.accion];
-    if (!f) throw new Error('Acción no permitida.');
     r = f(ses, p) || {};
-    if (p.accion !== 'estado') SpreadsheetApp.flush();
+    if (!soloLectura) SpreadsheetApp.flush();
   } finally {
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
+  // devuelve ya los datos actualizados para que la app no tenga que pedirlos otra vez
+  if (p.conEstado && !soloLectura) r.datos = Object.assign({ ok: true }, (ses.rol === 'admin' ? ADMIN_ : EMP_).estado(ses, {}));
   enviarCola_();
   return Object.assign({ ok: true }, r);
 }
