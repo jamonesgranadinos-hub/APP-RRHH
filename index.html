@@ -219,6 +219,8 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .opcion small{color:var(--pizarra);font-size:14px}
 .fila-emp{border:0;border-radius:0;background:none;padding:14px 4px;align-items:center}
 .fila-emp:has(input:checked){background:none}
+.preparacion svg{width:56px;height:56px;color:var(--marca-azul);margin-bottom:10px}
+.preparacion p{max-width:60ch}
 .version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
 .toast{overflow-wrap:anywhere;position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
@@ -239,7 +241,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-13 m</p>
+<p class="version">Versión 2026-11-14 n</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
@@ -823,8 +825,11 @@ function render(){
   if(S){ ANIO = vista.anio || Math.min(Math.max(+S.hoy.slice(0,4), ANIOS[0]), ANIOS[ANIOS.length-1]); }
   const admin = s && s.rol==="admin";
   if(s && vista.modulo==="horario" && !admin && !emp(s.id)?.horario) vista.modulo=null;
+  if(s && ["nominas","guardias"].includes(vista.modulo) && !admin && !VISIBLE_EMPLEADOS[vista.modulo]) vista.modulo=null;
   app.innerHTML = !s ? vAcceso() : s.cambiarPin ? vCambiarPin() : !vista.modulo ? vInicio()
     : vista.modulo==="horario" ? (admin ? vHorarioAdmin() : vHorarioEmp(s.id))
+    : vista.modulo==="nominas" ? vEnPreparacion("Nóminas", ICONO.nominas, "Aquí cada empleado verá sus nóminas de los últimos 12 meses y podrá pedir las más antiguas.", "Cuando tengas la carpeta <strong>Nóminas</strong> en tu Drive, con una carpeta por mes (por ejemplo <strong>2026-11</strong>) y el DNI de cada empleado en el nombre de su PDF, dímelo y lo conecto.")
+    : vista.modulo==="guardias" ? vEnPreparacion("Guardias", ICONO.guardias, "Aquí cada empleado verá los sábados que le toca guardia, recibirá un aviso unos días antes y podrá cambiarla con un compañero.", "Cuando tengas el cuadrante de guardias y hayas hablado con el encargado cómo se reparten los refuerzos, pásamelo y lo monto.")
     : (admin ? vAdmin() : vEmpleado(s.id));
   if(vista.modulo==="horario" && !admin) relojEnMarcha();
 }
@@ -997,12 +1002,25 @@ function irA(modulo){
   if(location.hash !== h) history.pushState(null, "", h || location.pathname);
   render(); window.scrollTo(0,0);
 }
-window.addEventListener("popstate", ()=>{ const m=location.hash.slice(1); vista.modulo = ["vacaciones","horario"].includes(m) ? m : null; if(vista.sesion && S) render(); });
+window.addEventListener("popstate", ()=>{ const m=location.hash.slice(1); vista.modulo = ["vacaciones","horario","nominas","guardias"].includes(m) ? m : null; if(vista.sesion && S) render(); });
 const volverInicio = () => `<button class="enlace volver" data-a="inicio">‹ Inicio</button>`;
+// Apartados en preparación: de momento solo los ve el administrador. Para enseñarlos a todos, poner true.
+const VISIBLE_EMPLEADOS = { nominas: false, guardias: false };
 const ICONO = {
+  nominas: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l9 9v29H12z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M29 5v9h9" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M30 25a7 7 0 1 0 0 10" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round"/><path d="M18 28h10M18 32h10" stroke="var(--marca-rojo)" stroke-width="3" stroke-linecap="round"/></svg>`,
+  guardias: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l16 6v12c0 10-7 18-16 22C15 40 8 32 8 22V10z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M17 24l5 5 9-10" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   vacaciones: `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="32" rx="6" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M6 19h36" stroke="currentColor" stroke-width="3.5"/><path d="M16 5v9M32 5v9" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/><rect x="13" y="25" width="9" height="9" rx="2" fill="var(--marca-rojo)"/><rect x="26" y="25" width="9" height="9" rx="2" fill="currentColor" opacity=".35"/></svg>`,
   horario: `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="25" r="17" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M24 15v11l7 5" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 4h10" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg>`
 };
+function vEnPreparacion(titulo, icono, que, falta){
+  return `${volverInicio()}<h1>${titulo}</h1>
+  <div class="bloque preparacion" style="margin-top:20px">${icono}
+    <h2>En preparación</h2>
+    <p>${que}</p>
+    <p class="muted" style="margin-top:12px">${falta}</p>
+    <p class="muted small" style="margin-top:16px">Este apartado solo lo ves tú. Los empleados no tienen este botón hasta que esté listo.</p>
+  </div>`;
+}
 function vInicio(){
   const s = vista.sesion, admin = s.rol==="admin", yo = !admin && emp(s.id);
   const pend = admin ? S.vac.filter(v=>v.estado==="pendiente").length + S.aus.filter(a=>a.tipo==="horas"&&a.origen==="empleado"&&!a.visto).length : 0;
@@ -1017,6 +1035,8 @@ function vInicio(){
   <div class="modulos">
     <button class="modulo" data-a="modulo" data-v="vacaciones">${ICONO.vacaciones}<span class="mod-t">Vacaciones${pend?` <span class="globo">${pend}</span>`:""}</span><span class="mod-s">${admin ? "Solicitudes, calendario, ausencias y bajas" : `Te quedan ${n(sv.quedan)} ${sv.quedan===1?"día":"días"}`}</span></button>
     ${puedeHorario ? `<button class="modulo" data-a="modulo" data-v="horario">${ICONO.horario}<span class="mod-t">Registro horario</span><span class="mod-s">${subHorario}</span></button>` : ""}
+    ${admin || VISIBLE_EMPLEADOS.nominas ? `<button class="modulo" data-a="modulo" data-v="nominas">${ICONO.nominas}<span class="mod-t">Nóminas</span><span class="mod-s">${admin && !VISIBLE_EMPLEADOS.nominas ? "En preparación · solo lo ves tú" : "Tus nóminas"}</span></button>` : ""}
+    ${admin || VISIBLE_EMPLEADOS.guardias ? `<button class="modulo" data-a="modulo" data-v="guardias">${ICONO.guardias}<span class="mod-t">Guardias</span><span class="mod-s">${admin && !VISIBLE_EMPLEADOS.guardias ? "En preparación · solo lo ves tú" : "Tus guardias de los sábados"}</span></button>` : ""}
   </div>`;
 }
 
@@ -1140,7 +1160,7 @@ async function activarAvisos(silencioso){
 /* ============ Arranque ============ */
 (async function(){
   try{ const t=localStorage.getItem(CLAVE_SESION); if(t) vista.sesion=JSON.parse(t); }catch(e){}
-  { const m=location.hash.slice(1); if(["vacaciones","horario"].includes(m)) vista.modulo=m; }
+  { const m=location.hash.slice(1); if(["vacaciones","horario","nominas","guardias"].includes(m)) vista.modulo=m; }
   render();
   if(vista.sesion && !vista.sesion.cambiarPin){
     const copia = copiaGuardada();
