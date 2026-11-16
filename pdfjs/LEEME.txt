@@ -1,0 +1,1 @@
+pdf.js 4.10.38 (Mozilla, licencia Apache 2.0) para ver las nóminas dentro de la app.

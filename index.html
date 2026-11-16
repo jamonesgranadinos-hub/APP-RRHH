@@ -222,6 +222,16 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .preparacion svg{width:56px;height:56px;color:var(--marca-azul);margin-bottom:10px}
 .preparacion p{max-width:60ch}
 .version{text-align:center;font-size:12px;color:var(--pizarra);margin:0 0 24px}
+.visor{position:fixed;inset:0;z-index:30;background:#3A3950;display:flex;flex-direction:column}
+.visor[hidden]{display:none}
+.visor-barra{background:var(--papel);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:3px solid var(--marca-rojo)}
+.visor-barra strong{font-family:var(--display);font-size:17px;color:var(--marca-azul);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visor-barra .acciones{flex-wrap:nowrap;gap:6px}
+.visor-barra .btn.chico{padding:7px 12px;min-height:38px}
+.visor-paginas{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px;overscroll-behavior:contain}
+.visor-paginas canvas{background:#fff;max-width:100%;height:auto;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.visor-paginas .espera{color:#E4E3F3;padding:60px 16px}
+.nom-anio{font-family:var(--display);font-size:15px;font-weight:700;color:var(--pizarra);margin:22px 0 6px;letter-spacing:.04em}
 .toast{overflow-wrap:anywhere;position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;background:var(--tinta);color:#fff;padding:12px 20px;border-radius:var(--r);transition:.25s;pointer-events:none;z-index:9;max-width:90vw}
 .toast.ver{opacity:1;transform:translate(-50%,0)}
 
@@ -241,8 +251,14 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-14 n</p>
+<p class="version">Versión 2026-11-16 a</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="visor" id="visor" hidden role="dialog" aria-modal="true" aria-labelledby="visorTitulo">
+  <div class="visor-barra"><strong id="visorTitulo">Nómina</strong>
+    <div class="acciones"><button class="btn chico" data-a="nomDescargar" id="visorDescargar" disabled>Descargar</button><button class="btn sec chico" data-a="nomCompartir" id="visorCompartir" hidden>Compartir</button><button class="btn sec chico" data-a="nomCerrar">Cerrar</button></div>
+  </div>
+  <div class="visor-paginas" id="visorPaginas"></div>
+</div>
 <div class="carga" aria-hidden="true"><i></i></div>
 
 <script>
@@ -778,7 +794,7 @@ function aplicarEstado(j, desdeCopia){
   ANIO_INICIO = c.ANIO_INICIO ?? ANIO_INICIO; DIAS_ANUALES = c.DIAS_ANUALES ?? DIAS_ANUALES; DIAS_FIJOS = c.DIAS_FIJOS ?? DIAS_FIJOS; PIN_PROV = c.PIN_PROV ?? PIN_PROV;
   const titulo = t => String(t||"").toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(m,a,l)=>a+l.toUpperCase());
   (j.empleados||[]).forEach(e=>{ e.nombre = titulo(e.nombre); });
-  S = {hoy:j.hoy, festivos:j.festivos||[], empleados:j.empleados||[], inicial:j.inicial||{}, vac:j.vac||[], aus:j.aus||[], extras:j.extras||[], registro:j.registro||[]};
+  S = {hoy:j.hoy, festivos:j.festivos||[], empleados:j.empleados||[], inicial:j.inicial||{}, vac:j.vac||[], aus:j.aus||[], extras:j.extras||[], registro:j.registro||[], modulos:j.modulos||{}, nomPend:j.nomPend||0};
   const ultimo = Math.max(+S.hoy.slice(0,4)+1, ANIO_INICIO);
   ANIOS = []; for(let a=ANIO_INICIO; a<=ultimo; a++) ANIOS.push(a);
   if(vista.sesion && vista.sesion.rol==="emp"){ vista.sesion.id = S.empleados[0]?.id; guardarSesion(); }
@@ -799,7 +815,7 @@ function refrescarPorDetras(minSegundos=0){
   if(Date.now()-ultimaCarga < minSegundos*1000) return;
   recargar(true).then(()=>{ if(!hayAlgoEscrito() && !document.body.classList.contains("cargando")) render(); }).catch(()=>{});
 }
-function cerrarSesion(){ borrarCopia(); vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null, modulo:null, regEdit:null}; S=null; guardarSesion(); if(location.hash) history.replaceState(null,"",location.pathname); render(); }
+function cerrarSesion(){ NOM=null; cerrarVisor(); borrarCopia(); vista={...vista, sesion:null, emp:null, sim:{}, rechazando:null, anio:null, confirmSalida:null, cerrando:null, modulo:null, regEdit:null}; S=null; guardarSesion(); if(location.hash) history.replaceState(null,"",location.pathname); render(); }
 // Hace una acción en la hoja, vuelve a leer los datos y avisa
 async function hacer(accion, datos, mensaje, despues){
   try{
@@ -825,10 +841,11 @@ function render(){
   if(S){ ANIO = vista.anio || Math.min(Math.max(+S.hoy.slice(0,4), ANIOS[0]), ANIOS[ANIOS.length-1]); }
   const admin = s && s.rol==="admin";
   if(s && vista.modulo==="horario" && !admin && !emp(s.id)?.horario) vista.modulo=null;
-  if(s && ["nominas","guardias"].includes(vista.modulo) && !admin && !VISIBLE_EMPLEADOS[vista.modulo]) vista.modulo=null;
+  if(s && S && ["nominas","guardias"].includes(vista.modulo) && !admin && !moduloVisible(vista.modulo)) vista.modulo=null;
+  if(s && S && !s.cambiarPin && vista.modulo==="nominas" && S.modulos.nominas && (!NOM || NOM.quien!==s.token)) queueMicrotask(()=>cargarNominas());
   app.innerHTML = !s ? vAcceso() : s.cambiarPin ? vCambiarPin() : !vista.modulo ? vInicio()
     : vista.modulo==="horario" ? (admin ? vHorarioAdmin() : vHorarioEmp(s.id))
-    : vista.modulo==="nominas" ? vEnPreparacion("Nóminas", ICONO.nominas, "Aquí cada empleado verá sus nóminas de los últimos 12 meses y podrá pedir las más antiguas.", "Cuando tengas la carpeta <strong>Nóminas</strong> en tu Drive, con una carpeta por mes (por ejemplo <strong>2026-11</strong>) y el DNI de cada empleado en el nombre de su PDF, dímelo y lo conecto.")
+    : vista.modulo==="nominas" ? (admin ? vNominasAdmin() : vNominasEmp())
     : vista.modulo==="guardias" ? vEnPreparacion("Guardias", ICONO.guardias, "Aquí cada empleado verá los sábados que le toca guardia, recibirá un aviso unos días antes y podrá cambiarla con un compañero.", "Cuando tengas el cuadrante de guardias y hayas hablado con el encargado cómo se reparten los refuerzos, pásamelo y lo monto.")
     : (admin ? vAdmin() : vEmpleado(s.id));
   if(vista.modulo==="horario" && !admin) relojEnMarcha();
@@ -886,9 +903,18 @@ document.addEventListener("click", ev=>{
     case "visto": hacer("visto",{id},"Marcado como visto"); break;
     case "quitarFest": hacer("quitarFestivo",{fecha:b.dataset.f},"Festivo quitado"); break;
     case "recargar": hacer("estado",{},"Datos actualizados"); break;
+    case "nomRecargar": cargarNominas(b.dataset.v==="1"); break;
+    case "verNom": verNomina(id, b.dataset.t); break;
+    case "nomCerrar": history.state && history.state.visor ? history.back() : cerrarVisor(); break;
+    case "nomDescargar": descargarNomina(); break;
+    case "nomCompartir": compartirNomina(); break;
+    case "nomEmp": vista.nomEmp = vista.nomEmp===id ? null : id; render(); break;
+    case "nomQuitarAlias": nominaAccion("nominaAsignar",{emp:id, nombre:b.dataset.t, quitar:true},"Nombre quitado"); break;
+    case "nomAcceso": nominaAccion("nominaAcceso",{id},"Acceso dado. Le llega un aviso."); break;
+    case "nomAtendida": nominaAccion("nominaAtendida",{id},"Petición marcada como atendida"); break;
   }
 });
-document.addEventListener("keydown", ev=>{ if(ev.key==="Enter" && ev.target.matches("tr[data-a=ficha]")) ev.target.click(); });
+document.addEventListener("keydown", ev=>{ if(ev.key==="Escape" && visorAbierto()){ history.state && history.state.visor ? history.back() : cerrarVisor(); return; } if(ev.key==="Enter" && ev.target.matches("tr[data-a=ficha]")) ev.target.click(); });
 document.addEventListener("change", ev=>{
   const t=ev.target;
   if(t.matches("[data-sim]")){ vista.sim[t.name]=t.value; if(t.name==="desde"&&vista.sim.hasta&&vista.sim.hasta<t.value) vista.sim.hasta=t.value; if(t.name==="fdesde"&&vista.sim.fhasta&&vista.sim.fhasta<t.value) vista.sim.fhasta=t.value; if(t.name==="pdesde"&&vista.sim.phasta&&vista.sim.phasta<t.value) vista.sim.phasta=t.value; rerenderConFoco(t.name); }
@@ -989,6 +1015,16 @@ document.addEventListener("submit", async ev=>{
     }catch(e2){ err("errDar", e2.message); }
     return;
   }
+  if(tipo==="pedirNom"){
+    if(!(d.texto||"").trim()){ err("errNom","Escribe qué nóminas necesitas."); return; }
+    if(await nominaAccion("pedirNominas",{texto:d.texto},"Petición enviada al administrador")) f.reset();
+    return;
+  }
+  if(tipo==="nomAsignar"){
+    if(!d.emp){ toast("Elige el empleado"); return; }
+    nominaAccion("nominaAsignar",{emp:d.emp, nombre:f.dataset.nombre},`Asignadas a ${(emp(d.emp)?.nombre||"").split(" ")[0]}`);
+    return;
+  }
   if(tipo==="fest"){
     if(S.festivos.some(x=>x.fecha===d.fecha)){ toast("Ese día ya es festivo"); return; }
     hacer("festivo",{fecha:d.fecha, nombre:d.nombre, ambito:d.ambito},"Festivo añadido"); return;
@@ -1002,10 +1038,12 @@ function irA(modulo){
   if(location.hash !== h) history.pushState(null, "", h || location.pathname);
   render(); window.scrollTo(0,0);
 }
-window.addEventListener("popstate", ()=>{ const m=location.hash.slice(1); vista.modulo = ["vacaciones","horario","nominas","guardias"].includes(m) ? m : null; if(vista.sesion && S) render(); });
+window.addEventListener("popstate", ()=>{ if(visorAbierto()){ cerrarVisor(); return; } const m=location.hash.slice(1); vista.modulo = ["vacaciones","horario","nominas","guardias"].includes(m) ? m : null; if(vista.sesion && S) render(); });
 const volverInicio = () => `<button class="enlace volver" data-a="inicio">‹ Inicio</button>`;
 // Apartados en preparación: de momento solo los ve el administrador. Para enseñarlos a todos, poner true.
-const VISIBLE_EMPLEADOS = { nominas: false, guardias: false };
+const VISIBLE_EMPLEADOS = { nominas: true, guardias: false };
+// Nóminas: además, la hoja tiene que tenerlas activadas (función "autorizar" ejecutada); si no, nadie ve el botón salvo el administrador.
+const moduloVisible = m => !!VISIBLE_EMPLEADOS[m] && (m!=="nominas" || !!(S && S.modulos && S.modulos.nominas));
 const ICONO = {
   nominas: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l9 9v29H12z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M29 5v9h9" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M30 25a7 7 0 1 0 0 10" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round"/><path d="M18 28h10M18 32h10" stroke="var(--marca-rojo)" stroke-width="3" stroke-linecap="round"/></svg>`,
   guardias: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4l16 6v12c0 10-7 18-16 22C15 40 8 32 8 22V10z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M17 24l5 5 9-10" fill="none" stroke="var(--marca-rojo)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -1035,8 +1073,8 @@ function vInicio(){
   <div class="modulos">
     <button class="modulo" data-a="modulo" data-v="vacaciones">${ICONO.vacaciones}<span class="mod-t">Vacaciones${pend?` <span class="globo">${pend}</span>`:""}</span><span class="mod-s">${admin ? "Solicitudes, calendario, ausencias y bajas" : `Te quedan ${n(sv.quedan)} ${sv.quedan===1?"día":"días"}`}</span></button>
     ${puedeHorario ? `<button class="modulo" data-a="modulo" data-v="horario">${ICONO.horario}<span class="mod-t">Registro horario</span><span class="mod-s">${subHorario}</span></button>` : ""}
-    ${admin || VISIBLE_EMPLEADOS.nominas ? `<button class="modulo" data-a="modulo" data-v="nominas">${ICONO.nominas}<span class="mod-t">Nóminas</span><span class="mod-s">${admin && !VISIBLE_EMPLEADOS.nominas ? "En preparación · solo lo ves tú" : "Tus nóminas"}</span></button>` : ""}
-    ${admin || VISIBLE_EMPLEADOS.guardias ? `<button class="modulo" data-a="modulo" data-v="guardias">${ICONO.guardias}<span class="mod-t">Guardias</span><span class="mod-s">${admin && !VISIBLE_EMPLEADOS.guardias ? "En preparación · solo lo ves tú" : "Tus guardias de los sábados"}</span></button>` : ""}
+    ${admin || moduloVisible("nominas") ? `<button class="modulo" data-a="modulo" data-v="nominas">${ICONO.nominas}<span class="mod-t">Nóminas${admin && S.nomPend?` <span class="globo">${S.nomPend}</span>`:""}</span><span class="mod-s">${admin ? (!S.modulos.nominas ? "Falta activarlo en la hoja · solo lo ves tú" : S.nomPend ? `${S.nomPend} ${S.nomPend===1?"petición":"peticiones"} de nóminas antiguas` : "Nóminas de la plantilla") : "Tus nóminas de los últimos 12 meses"}</span></button>` : ""}
+    ${admin || moduloVisible("guardias") ? `<button class="modulo" data-a="modulo" data-v="guardias">${ICONO.guardias}<span class="mod-t">Guardias</span><span class="mod-s">${admin && !moduloVisible("guardias") ? "En preparación · solo lo ves tú" : "Tus guardias de los sábados"}</span></button>` : ""}
   </div>`;
 }
 
@@ -1115,6 +1153,160 @@ function vHorarioAdmin(){
     </tbody></table></div></section>
   <section><h2>Quién ficha</h2><p class="muted small" style="margin-bottom:10px">Solo las personas marcadas ven el botón de Registro horario en su app.</p>
     <ul class="lista">${activos().map(e=>`<li style="align-items:center"><div class="q"><strong>${esc(e.nombre)}</strong></div>${e.horario?`<span class="chip ok">Ficha</span><button class="enlace rojo" data-a="regAcceso" data-id="${e.id}" data-v="0">Quitar acceso</button>`:`<button class="btn sec chico" data-a="regAcceso" data-id="${e.id}" data-v="1">Dar acceso</button>`}</li>`).join("")}</ul></section>`;
+}
+
+/* ============ Nóminas ============ */
+// Las nóminas no se guardan en el móvil: se piden a la hoja cada vez y el PDF solo vive mientras está abierto.
+let NOM = null;
+async function cargarNominas(forzar){
+  const yo = vista.sesion && vista.sesion.token; if(!yo) return;
+  const antes = NOM && NOM.quien===yo ? NOM : {};
+  NOM = {...antes, quien:yo, cargando:true, error:null};
+  if(vista.modulo==="nominas") render();
+  try{ const j = await api("nominas", forzar?{forzar:true}:{}, !!antes.datos); if(NOM && NOM.quien===yo){ NOM.datos=j; if(forzar) toast(`Carpeta revisada: ${j.lista.length} nóminas`); } }
+  catch(e){ if(NOM && NOM.quien===yo) NOM.error = e.message || "No se han podido cargar las nóminas."; }
+  finally{ if(NOM && NOM.quien===yo){ NOM.cargando=false; if(vista.modulo==="nominas" && vista.sesion && !hayAlgoEscrito()) render(); } }
+}
+async function nominaAccion(accion, datos, mensaje){
+  try{ await api(accion, datos); toast(mensaje); if(accion!=="pedirNominas" && vista.sesion.rol==="admin") refrescarPorDetras(0); await cargarNominas(); return true; }
+  catch(e){ toast(e.message||"No se ha podido guardar"); return false; }
+}
+const mayus = t => t.charAt(0).toUpperCase() + t.slice(1);
+const mesNom = (m, extra) => mayus(m ? `${ML[+m.slice(5,7)-1]} ${m.slice(0,4)}${extra?" · paga extra":""}` : `sin fecha${extra?" · paga extra":""}`);
+const mesCorto = x => mayus(x.mes ? `${ML[+x.mes.slice(5,7)-1]}${x.extra?" · paga extra":""}` : `sin fecha${x.extra?" · paga extra":""}`);
+const tituloNom = x => mesNom(x.mes, x.extra);
+function cabeceraNom(){ return `${volverInicio()}<h1>Nóminas</h1>`; }
+function esperaNom(){
+  if(NOM && NOM.error) return `<div class="aviso mal" style="margin-top:18px">${esc(NOM.error)} <button class="enlace" data-a="nomRecargar">Volver a probar</button></div>`;
+  return `<p class="espera">Buscando nóminas…</p>`;
+}
+function listaNom(items, conAntigua, limite){
+  if(!items.length) return "";
+  let anio = "", h = "";
+  items.forEach(x=>{
+    const a = (x.mes||"").slice(0,4) || "Sin fecha";
+    if(a!==anio){ if(anio) h+=`</ul>`; anio=a; h+=`<p class="nom-anio">${a}</p><ul class="lista">`; }
+    h += `<li style="align-items:center"><div class="q"><strong>${esc(mesCorto(x))}</strong>${conAntigua && !(x.mes>=limite)?`<span class="muted small">Más de 12 meses</span>`:""}</div><button class="btn sec chico" data-a="verNom" data-id="${esc(x.id)}" data-t="${esc(tituloNom(x))}">Ver</button></li>`;
+  });
+  return h + `</ul>`;
+}
+const estadoPet = p => p.estado==="pendiente" ? `<span class="chip pend">Pendiente</span>` : p.estado==="acceso" ? `<span class="chip ok">${p.hasta && p.hasta>=S.hoy ? `Puedes verlas hasta el ${fc(p.hasta)}` : "Acceso caducado"}</span>` : `<span class="chip gris">Atendida</span>`;
+function vNominasEmp(){
+  const N = NOM && NOM.datos;
+  if(!N) return cabeceraNom() + esperaNom();
+  return `${cabeceraNom()}
+  <p class="muted" style="margin-top:6px">Solo tú ves tus nóminas. Aquí están las de los últimos 12 meses${N.acceso?` y, hasta el ${fc(N.acceso)}, también las anteriores`:""}.</p>
+  <section style="margin-top:22px">${listaNom(N.lista, true, N.limite) || `<div class="bloque"><p>Todavía no hay nóminas tuyas en la app.</p><p class="muted small" style="margin-top:8px">Cuando el administrador suba la de este mes, te llegará un aviso${avisosListos()?" (si tienes los avisos activados)":""}.</p></div>`}</section>
+  <section><div class="bloque"><h2>¿Necesitas una nómina más antigua?</h2>
+    <p class="muted small">${N.anteriores ? `Tienes ${N.anteriores===1?"1 nómina anterior guardada":`${N.anteriores} nóminas anteriores guardadas`}. ` : ""}Pídela y el administrador te la dará.</p>
+    <form data-f="pedirNom" style="margin-top:14px">
+      <label class="campo"><span>¿Qué nóminas necesitas?</span><textarea name="texto" maxlength="300" placeholder="Por ejemplo: todas las de 2025, o la de marzo de 2024"></textarea></label>
+      <div id="errNom" style="margin-top:10px"></div>
+      <div class="acciones" style="margin-top:12px"><button class="btn">Pedir al administrador</button></div>
+    </form>
+    ${N.peticiones.length?`<h3 style="margin-top:22px">Tus peticiones</h3><ul class="lista" style="margin-top:8px">${N.peticiones.map(p=>`<li><div class="q"><strong>${esc(p.texto)}</strong><span class="muted small">Pedida el ${fc(p.fecha)}${p.nota?` · ${esc(p.nota)}`:""}</span></div>${estadoPet(p)}</li>`).join("")}</ul>`:""}
+  </div></section>`;
+}
+function vNominasAdmin(){
+  if(!S.modulos.nominas) return `${cabeceraNom()}
+  <div class="bloque preparacion" style="margin-top:20px">${ICONO.nominas}<h2>Falta un paso para activarlas</h2>
+    <p>La app tiene que poder leer la carpeta <strong>RRHH › Nóminas</strong> de tu Drive. Hazlo una sola vez:</p>
+    <ol style="margin:12px 0 0;padding-left:22px;display:grid;gap:6px;max-width:60ch">
+      <li>En la hoja, menú <strong>App RRHH › Actualizar ahora desde GitHub</strong> (si dice que ya tienes la última versión, sigue).</li>
+      <li>Menú <strong>Extensiones › Apps Script</strong>. Arriba elige la función <strong>autorizar</strong> y pulsa <strong>Ejecutar</strong>.</li>
+      <li>Acepta el permiso nuevo (<em>ver archivos de Google Drive</em>). Solo lee; no cambia ni comparte nada.</li>
+    </ol>
+    <p class="muted small" style="margin-top:14px">Hasta entonces los empleados no ven el botón de Nóminas.</p>
+    <div class="acciones" style="margin-top:14px"><button class="btn sec chico" data-a="recargar">Ya lo he hecho</button></div>
+  </div>`;
+  const N = NOM && NOM.datos;
+  if(!N) return cabeceraNom() + esperaNom();
+  const sin = {}, ids = new Set(S.empleados.map(e=>e.id));
+  N.lista.filter(x=>!x.emp).forEach(x=>{ const k=x.nombre||"(sin nombre)"; (sin[k]=sin[k]||{nombre:x.nombre, dudoso:x.dudoso, items:[]}).items.push(x); });
+  const grupos = Object.values(sin).sort((a,b)=>b.items.length-a.items.length);
+  const pend = N.peticiones.filter(p=>p.estado==="pendiente"), hechas = N.peticiones.filter(p=>p.estado!=="pendiente");
+  const deEmp = eid => N.lista.filter(x=>x.emp===eid);
+  const mesMax = N.lista.reduce((m,x)=>x.mes>m?x.mes:m,"");
+  const filas = activos().map(e=>{
+    const ns = deEmp(e.id), ult = ns.find(x=>x.mes), al = (N.alias.find(a=>a.emp===e.id)||{}).alias||[];
+    const abierto = vista.nomEmp===e.id;
+    return `<tr data-a="nomEmp" data-id="${e.id}" aria-expanded="${abierto}"><td><strong>${esc(e.nombre)}</strong>${al.length?`<br><span class="muted small">En las nóminas: ${al.map(esc).join(", ")}</span>`:""}</td><td>${ult?`${esc(mesNom(ult.mes, false))}${mesMax && ult.mes<mesMax?` <span class="chip no">falta ${esc(ML[+mesMax.slice(5,7)-1])}</span>`:""}`:`<span class="chip no">Ninguna</span>`}</td><td class="num">${ns.filter(x=>x.mes>=N.limite).length}</td></tr>
+    ${abierto?`<tr style="cursor:default"><td colspan="3" style="background:var(--cal)">${listaNom(ns, true, N.limite) || `<p class="muted">No hay ninguna nómina con su nombre.</p>`}${al.length?`<p class="small" style="margin-top:10px">${al.map(a=>`<button class="enlace rojo" data-a="nomQuitarAlias" data-id="${e.id}" data-t="${esc(a)}">Quitar "${esc(a)}"</button>`).join(" ")}</p>`:""}</td></tr>`:""}`;
+  }).join("");
+  return `${cabeceraNom()}
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:6px">
+    <p class="muted" style="max-width:60ch">Se leen de la carpeta <strong>RRHH › Nóminas</strong> de tu Drive. Cada empleado solo ve las que llevan su nombre exacto, de los últimos 12 meses.</p>
+    <button class="btn sec chico" data-a="nomRecargar" data-v="1">Buscar nóminas nuevas</button>
+  </div>
+  ${N.actualizado?`<p class="muted small" style="margin-top:6px">${N.lista.length} nóminas · carpeta revisada el ${fc(N.actualizado.slice(0,10))}${N.actualizado.length>11?` a las ${N.actualizado.slice(11)}`:""}</p>`:""}
+  ${pend.length?`<section><h2>Peticiones de nóminas antiguas</h2><ul class="lista">${pend.map(p=>`<li><div class="q"><strong>${esc(emp(p.emp)?.nombre||p.emp)}</strong><span>${esc(p.texto)}</span><span class="muted small">Pedida el ${fc(p.fecha)}</span></div><div class="acciones"><button class="btn chico" data-a="nomAcceso" data-id="${p.id}">Dejarle verlas 7 días</button><button class="btn sec chico" data-a="nomAtendida" data-id="${p.id}">Ya se las he dado</button></div></li>`).join("")}</ul>
+    <p class="muted small" style="margin-top:8px">"Dejarle verlas" le abre en la app todas sus nóminas antiguas durante 7 días. "Ya se las he dado" es para cuando se las entregas tú (en papel, por correo…).</p></section>`:""}
+  ${grupos.length?`<section><h2>Nóminas sin dueño <span class="globo" style="vertical-align:middle">${grupos.length}</span></h2>
+    <p class="muted small" style="margin-bottom:10px">Su nombre no coincide exacto con nadie de la plantilla, así que <strong>nadie las ve</strong>. Si son de un empleado (por ejemplo, su nombre está escrito distinto), asígnaselas y se le enseñarán también las de los próximos meses.</p>
+    <ul class="lista">${grupos.map(g=>`<li><div class="q"><strong>${esc(g.nombre||"Archivo sin nombre de persona")}</strong><span class="muted small">${g.items.length} ${g.items.length===1?"nómina":"nóminas"}: ${g.items.slice(0,4).map(x=>esc(tituloNom(x))).join(", ")}${g.items.length>4?"…":""}${g.dudoso?" · coincide con dos empleados":""}</span></div>
+      ${g.nombre?`<form data-f="nomAsignar" data-nombre="${esc(g.nombre)}" class="acciones" style="flex:1 1 260px"><select name="emp" style="flex:1;min-width:0"><option value="">¿De quién es?</option>${activos().map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("")}</select><button class="btn chico">Asignar</button></form>`:""}</li>`).join("")}</ul></section>`:""}
+  <section><h2>Por empleado</h2>
+    <div style="overflow-x:auto"><table class="tabla"><thead><tr><th>Empleado</th><th>Última nómina</th><th class="num">Últimos 12 meses</th></tr></thead><tbody>${filas}</tbody></table></div>
+    <p class="muted small" style="margin-top:8px">Toca un empleado para ver sus nóminas.</p></section>
+  ${hechas.length?`<section><details><summary class="enlace">Peticiones ya atendidas (${hechas.length})</summary><ul class="lista" style="margin-top:10px">${hechas.map(p=>`<li><div class="q"><strong>${esc(emp(p.emp)?.nombre||p.emp)}</strong><span>${esc(p.texto)}</span><span class="muted small">Pedida el ${fc(p.fecha)}${p.resuelta?` · resuelta el ${fc(p.resuelta)}`:""}</span></div>${estadoPet(p)}</li>`).join("")}</ul></details></section>`:""}`;
+}
+
+/* Visor de PDF dentro de la app (pdf.js, copiado en la carpeta pdfjs) */
+let visor = {blob:null, nombre:"", turno:0};
+const visorAbierto = () => !document.getElementById("visor").hidden;
+function cerrarVisor(){
+  const el = document.getElementById("visor"); if(!el) return;
+  visor.turno++; visor.blob=null; visor.nombre="";
+  el.hidden = true; document.getElementById("visorPaginas").innerHTML=""; document.body.style.overflow="";
+}
+async function verNomina(id, titulo){
+  const el = document.getElementById("visor"), pags = document.getElementById("visorPaginas");
+  const turno = ++visor.turno;
+  visor.blob=null; document.getElementById("visorTitulo").textContent = titulo || "Nómina";
+  document.getElementById("visorDescargar").disabled = true; document.getElementById("visorCompartir").hidden = true;
+  pags.innerHTML = `<p class="espera">Abriendo la nómina…</p>`;
+  el.hidden = false; document.body.style.overflow="hidden";
+  if(!(history.state && history.state.visor)) history.pushState({visor:1}, "", location.href);
+  let j;
+  try{ j = await api("verNomina", {id}); }
+  catch(e){ if(turno===visor.turno) pags.innerHTML = `<p class="espera">${esc(e.message||"No se ha podido abrir.")}</p>`; return; }
+  if(turno!==visor.turno) return;
+  const bin = atob(j.pdf), bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  visor.blob = new Blob([bytes], {type:"application/pdf"});
+  visor.nombre = `Nomina ${j.mes||"sin-fecha"}${j.extra?" extra":""}.pdf`;   // sin tildes: algunos móviles las quitan del nombre del archivo
+  document.getElementById("visorDescargar").disabled = false;
+  try{ const f = new File([visor.blob], visor.nombre, {type:"application/pdf"}); document.getElementById("visorCompartir").hidden = !(navigator.canShare && navigator.canShare({files:[f]})); }catch(e){}
+  try{
+    const pdfjs = await import("./pdfjs/pdf.min.mjs");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs/pdf.worker.min.mjs", location.href).href;
+    const doc = await pdfjs.getDocument({data: bytes.slice(), standardFontDataUrl: new URL("pdfjs/standard_fonts/", location.href).href}).promise;
+    if(turno!==visor.turno) return;
+    pags.innerHTML = "";
+    const ancho = Math.min(pags.clientWidth - 24, 900), dpr = Math.min(window.devicePixelRatio||1, 3);
+    for(let n=1; n<=doc.numPages; n++){
+      const pag = await doc.getPage(n);
+      const base = pag.getViewport({scale:1}), esc_ = ancho / base.width, vp = pag.getViewport({scale: esc_ * dpr});
+      const c = document.createElement("canvas"); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      c.style.width = Math.floor(vp.width/dpr) + "px"; c.setAttribute("aria-label", `Página ${n} de ${doc.numPages}`);
+      if(turno!==visor.turno) return;
+      pags.appendChild(c);
+      await pag.render({canvasContext: c.getContext("2d"), viewport: vp}).promise;
+    }
+    doc.destroy();
+  }catch(e){
+    if(turno===visor.turno) pags.innerHTML = `<p class="espera">No se puede enseñar aquí en este móvil. Pulsa <strong>Descargar</strong> para abrirla con el visor de PDF.</p>`;
+  }
+}
+function descargarNomina(){
+  if(!visor.blob) return;
+  const u = URL.createObjectURL(visor.blob), a = document.createElement("a");
+  a.href = u; a.download = visor.nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u), 60000);
+}
+async function compartirNomina(){
+  if(!visor.blob) return;
+  try{ await navigator.share({files:[new File([visor.blob], visor.nombre, {type:"application/pdf"})], title: visor.nombre}); }catch(e){}
 }
 
 /* ============ Avisos al móvil ============ */

@@ -20,17 +20,28 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-13 a';
+const VERSION_SERVIDOR = '2026-11-16 a';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
-const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario' };
+const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
+const HOJA = { emp: 'Empleados', vac: 'Vacaciones', aus: 'Ausencias y bajas', ext: 'Días extra', fest: 'Festivos', reg: 'Registro horario', snom: 'Peticiones de nóminas' };
+
+// Nóminas: carpeta RRHH › Nóminas del Drive (con subcarpetas por año y por mes).
+// Cada PDF se llama "2026-10 Nómina - Apellidos Nombre.pdf" y se empareja con el empleado que tenga exactamente esos nombres.
+const NOMINAS = {
+  CARPETA: '1Se4AOpOY-szDwxvQY1dZWejNgTR4uUg9',
+  MESES: 12,        // el empleado ve las nóminas de los últimos 12 meses
+  DIAS_ACCESO: 7,   // cuando pide las antiguas y el administrador le da acceso, las ve durante estos días
+  HORAS_CACHE: 2    // la lista de PDFs se guarda este tiempo (cada hora se renueva sola y se puede forzar desde la app)
+};
+const ESTADO_SNOM = { pendiente: 'Pendiente', acceso: 'Acceso dado', atendida: 'Atendida' };
+const ESTADO_SNOM_I = inv(ESTADO_SNOM);
 const ORIGEN_REG = { movil: 'Fichado en el móvil', admin: 'Apuntado por el administrador', corregido: 'Corregido por el administrador' };
 const ORIGEN_REG_I = Object.fromEntries(Object.entries(ORIGEN_REG).map(([k, v]) => [v, k]));
 
 const ORIGEN = { empleado: 'Pedida por el empleado', admin: 'Días fijos', previa: 'Aprobada antes de la app', dada: 'Dada por el administrador', regalo: 'Día regalado' };
 const ESTADO = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
 const TIPO   = { horas: 'Ausencia por horas', baja: 'Baja', permiso: 'Permiso', falta: 'Falta puntual', retraso: 'Retraso' };
-const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
 const ORIGEN_I = inv(ORIGEN), ESTADO_I = inv(ESTADO), TIPO_I = inv(TIPO);
 
 /* ================= Entrada ================= */
@@ -60,7 +71,7 @@ function despachar_(p) {
   const f = ses.rol === 'admin' ? ADMIN_[p.accion] : EMP_[p.accion];
   if (!f) throw new Error('Acción no permitida.');
   // leer no necesita esperar a nadie; solo las escrituras van de una en una
-  const soloLectura = p.accion === 'estado';
+  const soloLectura = ['estado', 'nominas', 'verNomina'].indexOf(p.accion) >= 0;
   const lock = soloLectura ? null : LockService.getScriptLock();
   if (lock) lock.waitLock(20000);
   let r;
@@ -292,7 +303,7 @@ const EMP_ = {
   estado(ses) {
     const D = leerTodo_(), id = ses.id, yo = D.empleados.find(e => e.id === id);
     if (!yo || !yo.activo) throw new Error('Este usuario ya no tiene acceso a la app.');
-    return { hoy: hoy_(), cfg: CFG, festivos: D.festivos,
+    return { hoy: hoy_(), cfg: CFG, festivos: D.festivos, modulos: { nominas: nominasListas_() },
       empleados: [{ id: yo.id, nombre: yo.nombre, pinCambiado: yo.pinCambiado, activo: true, horario: yo.horario }],
       registro: yo.horario ? leerRegistro_(sumar_(hoy_(), -70)).filter(r => r.emp === id) : [],
       inicial: D.inicial[id] != null ? { [id]: D.inicial[id] } : {},
@@ -348,6 +359,29 @@ const EMP_ = {
     t.hoja.appendRow([nuevoId_('R'), Number(fecha.slice(0, 4)), ses.id, nombre_(ses.id), fecha, "'" + hora, '', '', ORIGEN_REG.movil, '', fecha, '']);
     return { hora };
   },
+  /** Solo las nóminas de quien ha entrado: nunca se manda nada de otro empleado. */
+  nominas(ses) {
+    comprobarNominas_();
+    const mias = nominasDe_(ses.id), lim = limiteNominas_(), acceso = accesoNominas_(ses.id);
+    return { limite: lim, acceso: acceso || null,
+      lista: mias.filter(x => acceso || x.mes >= lim).map(x => ({ id: x.id, mes: x.mes, extra: x.extra })),
+      anteriores: mias.filter(x => !(x.mes >= lim)).length,
+      peticiones: peticionesNominas_().filter(x => x.emp === ses.id).slice(-10).reverse().map(x => ({ id: x.id, texto: x.texto, estado: x.estado, fecha: x.fecha, hasta: x.hasta, nota: x.nota })) };
+  },
+  verNomina(ses, p) {
+    comprobarNominas_();
+    const x = nominasDe_(ses.id).find(n => n.id === String(p.id || ''));
+    if (!x) throw new Error('No puedes ver esa nómina.');
+    if (!(x.mes >= limiteNominas_()) && !accesoNominas_(ses.id)) throw new Error('Esa nómina tiene más de ' + NOMINAS.MESES + ' meses. Pídela al administrador.');
+    return pdfNomina_(x);
+  },
+  pedirNominas(ses, p) {
+    const texto = texto_(p.texto, 300);
+    if (!texto) throw new Error('Escribe qué nóminas necesitas.');
+    if (peticionesNominas_().filter(x => x.emp === ses.id && x.estado === 'pendiente').length >= 3) throw new Error('Ya tienes peticiones sin contestar. Espera a que el administrador las atienda.');
+    hojaPeticionesNominas_().appendRow([nuevoId_('N'), Number(hoy_().slice(0, 4)), ses.id, nombre_(ses.id), texto, ESTADO_SNOM.pendiente, hoy_(), '', '', '']);
+    avisar_('admin', 'Petición de nóminas', nombreCorto_(ses.id) + ': ' + texto);
+  },
   anularAviso(ses, p) {
     const r = buscar_(HOJA.aus, p.id);
     if (r.f[2] !== ses.id || r.f[4] !== TIPO.horas || String(r.f[14]).trim() !== 'Sí' || fecha_(r.f[5]) < hoy_()) throw new Error('No puedes anular ese aviso.');
@@ -358,7 +392,11 @@ const EMP_ = {
 /* ================= Acciones del administrador ================= */
 
 const ADMIN_ = {
-  estado() { const D = leerTodo_(); return Object.assign({ hoy: hoy_(), cfg: CFG, registro: leerRegistro_(sumar_(hoy_(), -400)) }, D); },
+  estado() {
+    const D = leerTodo_();
+    return Object.assign({ hoy: hoy_(), cfg: CFG, registro: leerRegistro_(sumar_(hoy_(), -400)),
+      modulos: { nominas: nominasListas_() }, nomPend: peticionesNominas_().filter(x => x.estado === 'pendiente').length }, D);
+  },
   registroAcceso(ses, p) { const r = buscar_(HOJA.emp, p.emp); r.hoja.getRange(r.f.fila, 10).setValue(p.si ? 'Sí' : 'No'); },
   registroGuardar(ses, p) {
     const fecha = fechaValida_(p.fecha), entrada = horaValida_(p.entrada), salida = p.salida ? horaValida_(p.salida) : '';
@@ -477,8 +515,171 @@ const ADMIN_ = {
   quitarFestivo(ses, p) {
     const t = tabla_(HOJA.fest), f = t.filas.find(x => fecha_(x[0]) === p.fecha);
     if (f) t.hoja.deleteRow(f.fila);
+  },
+  nominas(ses, p) {
+    comprobarNominas_();
+    const lista = nominasAsignadas_(indiceNominas_(!!p.forzar), empleadosNominas_());
+    return { limite: limiteNominas_(), actualizado: CacheService.getScriptCache().get('nomhora') || '',
+      lista: lista.map(x => ({ id: x.id, mes: x.mes, extra: x.extra, nombre: x.nombre, emp: x.emp, dudoso: x.dudoso })),
+      alias: empleadosNominas_().filter(e => e.alias.length).map(e => ({ emp: e.id, alias: e.alias })),
+      peticiones: peticionesNominas_().slice(-60).reverse() };
+  },
+  verNomina(ses, p) {
+    comprobarNominas_();
+    const x = indiceNominas_(false).find(n => n.id === String(p.id || ''));
+    if (!x) throw new Error('No encuentro esa nómina. Pulsa "Buscar nóminas nuevas".');
+    return pdfNomina_(x);
+  },
+  /** Para nóminas que no casan solas (nombre escrito distinto): se apunta en la ficha "Nombre en las nóminas". */
+  nominaAsignar(ses, p) {
+    const nombre = texto_(p.nombre, 120), r = buscar_(HOJA.emp, p.emp);
+    if (!claveNombre_(nombre)) throw new Error('Falta el nombre de la nómina.');
+    const alias = String(r.f[10] || '').split('|').map(x => x.trim()).filter(Boolean);
+    const quedan = p.quitar ? alias.filter(a => claveNombre_(a) !== claveNombre_(nombre)) : alias.concat(alias.some(a => claveNombre_(a) === claveNombre_(nombre)) ? [] : [nombre]);
+    if (!String(r.hoja.getRange(1, 11).getValue() || '').trim()) r.hoja.getRange(1, 11).setValue('Nombre en las nóminas');
+    r.hoja.getRange(r.f.fila, 11).setValue(quedan.join(' | '));
+  },
+  nominaAcceso(ses, p) {
+    const r = buscar_(HOJA.snom, p.id), hasta = sumar_(hoy_(), NOMINAS.DIAS_ACCESO);
+    r.hoja.getRange(r.f.fila, 6, 1, 5).setValues([[ESTADO_SNOM.acceso, r.f[6], hoy_(), hasta, texto_(p.nota)]]);
+    avisar_(r.f[2], 'Nóminas anteriores', 'Ya puedes ver todas tus nóminas en la app hasta el ' + fechaCorta_(hasta) + '.');
+  },
+  nominaAtendida(ses, p) {
+    const r = buscar_(HOJA.snom, p.id), nota = texto_(p.nota);
+    r.hoja.getRange(r.f.fila, 6, 1, 5).setValues([[ESTADO_SNOM.atendida, r.f[6], hoy_(), '', nota]]);
+    avisar_(r.f[2], 'Tu petición de nóminas', 'El administrador la ha atendido' + (nota ? ': ' + nota : '.'));
   }
 };
+
+/* ================= Nóminas ================= */
+
+function carpetaNominas_() { return PropertiesService.getScriptProperties().getProperty('CARPETA_NOMINAS') || NOMINAS.CARPETA; }
+/** Se marca al ejecutar "autorizar" con éxito: hasta entonces los empleados no ven el botón. */
+function nominasListas_() { return PropertiesService.getScriptProperties().getProperty('NOMINAS_LISTO') === '1'; }
+function comprobarNominas_() {
+  if (!nominasListas_()) throw new Error('Las nóminas aún no están activadas: en Apps Script elige la función "autorizar" y pulsa Ejecutar.');
+}
+/** "Gutiérrez Heras, Marcial" y "MARCIAL GUTIERREZ HERAS" dan lo mismo: sin tildes, mayúsculas y palabras ordenadas. */
+function claveNombre_(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(Boolean).sort().join(' ');
+}
+/** Saca mes, si es extra y el nombre de la persona del nombre del archivo (y de sus carpetas). */
+function analizarNomina_(archivo, ruta) {
+  const base = String(archivo).replace(/\.pdf$/i, '').trim();
+  const i = base.lastIndexOf(' - ');
+  const persona = i >= 0 ? base.slice(i + 3).trim() : '';
+  const cabeza = i >= 0 ? base.slice(0, i) : base;
+  const todo = [cabeza].concat((ruta || []).slice().reverse());
+  let mes = '';
+  for (const t of todo) { const m = String(t).match(/(20\d{2})[-_ .](0[1-9]|1[0-2])/); if (m) { mes = m[1] + '-' + m[2]; break; } }
+  const extra = /extra/i.test(cabeza) || (ruta || []).some(t => /extra/i.test(t));
+  return { mes, extra, nombre: persona, clave: claveNombre_(persona) };
+}
+/** Recorre la carpeta de nóminas (sin abrir los PDF) y guarda la lista un rato. */
+function indiceNominas_(forzar) {
+  if (!forzar) { const g = cacheLeer_('nomidx'); if (g) return JSON.parse(g); }
+  const out = [];
+  const visitar = (carpeta, ruta, prof) => {
+    const fs = carpeta.searchFiles('trashed = false and mimeType = "application/pdf"');
+    while (fs.hasNext()) { const f = fs.next(); out.push(Object.assign({ id: f.getId() }, analizarNomina_(f.getName(), ruta))); }
+    if (prof >= 4) return;
+    const cs = carpeta.searchFolders('trashed = false');
+    while (cs.hasNext()) { const c = cs.next(), n = c.getName(); if (/whatsapp/i.test(n)) continue; visitar(c, ruta.concat(n), prof + 1); }
+  };
+  visitar(DriveApp.getFolderById(carpetaNominas_()), [], 0);
+  out.sort((a, b) => (b.mes + (b.extra ? 'x' : '')).localeCompare(a.mes + (a.extra ? 'x' : '')) || a.nombre.localeCompare(b.nombre));
+  cacheGuardar_('nomidx', JSON.stringify(out), NOMINAS.HORAS_CACHE * 3600);
+  CacheService.getScriptCache().put('nomhora', Utilities.formatDate(new Date(), zona_(), 'yyyy-MM-dd HH:mm'), NOMINAS.HORAS_CACHE * 3600);
+  return out;
+}
+function empleadosNominas_() {
+  return tabla_(HOJA.emp).filas.map(f => ({ id: f[0], nombre: f[1], alias: String(f[10] || '').split('|').map(x => x.trim()).filter(Boolean) }));
+}
+/** Une cada nómina con su empleado. Si el nombre no casa exacto con UNO solo, la nómina no es de nadie (nadie la ve). */
+function nominasAsignadas_(indice, emps) {
+  const mapa = {};
+  emps.forEach(e => [e.nombre].concat(e.alias).forEach(n => {
+    const k = claveNombre_(n); if (!k) return;
+    mapa[k] = mapa[k] || []; if (mapa[k].indexOf(e.id) < 0) mapa[k].push(e.id);
+  }));
+  return indice.map(x => { const ids = (x.clave && mapa[x.clave]) || []; return Object.assign({}, x, { emp: ids.length === 1 ? ids[0] : null, dudoso: ids.length > 1 }); });
+}
+function nominasDe_(id) { return nominasAsignadas_(indiceNominas_(false), empleadosNominas_()).filter(x => x.emp === id); }
+function limiteNominas_() {
+  const h = hoy_(); let y = Number(h.slice(0, 4)), m = Number(h.slice(5, 7)) - NOMINAS.MESES;
+  while (m < 1) { m += 12; y--; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+/** Fecha hasta la que el empleado puede ver también las nóminas antiguas (o '' si no). */
+function accesoNominas_(id) {
+  const hoy = hoy_();
+  return peticionesNominas_().filter(x => x.emp === id && x.estado === 'acceso' && x.hasta >= hoy).map(x => x.hasta).sort().pop() || '';
+}
+/** Abre el PDF (solo después de comprobar de quién es) y lo manda dentro de la respuesta: sin enlaces públicos. */
+function pdfNomina_(x) {
+  const f = DriveApp.getFileById(x.id);
+  if (f.isTrashed() || analizarNomina_(f.getName(), []).clave !== x.clave) {
+    cacheBorrar_('nomidx');
+    throw new Error('Esa nómina ha cambiado en el Drive. Vuelve a entrar en Nóminas.');
+  }
+  const bytes = f.getBlob().getBytes();
+  if (bytes.length > 15 * 1024 * 1024) throw new Error('El PDF es demasiado grande para verlo en la app.');
+  return { mes: x.mes, extra: x.extra, pdf: Utilities.base64Encode(bytes) };
+}
+function hojaPeticionesNominas_() {
+  const ss = SpreadsheetApp.getActive();
+  let h = ss.getSheetByName(HOJA.snom);
+  if (!h) {
+    h = ss.insertSheet(HOJA.snom);
+    h.getRange(1, 1, 1, 10).setValues([['ID', 'Año', 'ID empleado', 'Empleado', 'Qué necesita', 'Estado', 'Pedida el', 'Resuelta el', 'Puede verlas hasta', 'Nota del administrador']]).setFontWeight('bold');
+    h.setFrozenRows(1);
+  }
+  return h;
+}
+function peticionesNominas_() {
+  if (!SpreadsheetApp.getActive().getSheetByName(HOJA.snom)) return [];
+  return tabla_(HOJA.snom).filas.map(f => ({ id: String(f[0]), emp: f[2], texto: f[4] || '', estado: ESTADO_SNOM_I[f[5]] || 'pendiente',
+    fecha: fecha_(f[6]), resuelta: fecha_(f[7]), hasta: fecha_(f[8]), nota: f[9] || '' }));
+}
+/** Cada hora: avisa a cada empleado cuando aparece una nómina suya nueva. */
+function avisarNominasNuevas_() {
+  if (!nominasListas_()) return;
+  const pr = PropertiesService.getScriptProperties(), previo = pr.getProperty('NOM_ULTIMAS');
+  const ult = JSON.parse(previo || '{}'), lim = limiteNominas_(), ahora = {};
+  nominasAsignadas_(indiceNominas_(true), empleadosNominas_()).forEach(x => {
+    if (!x.emp || !x.mes) return;
+    const k = x.mes + (x.extra ? 'x' : '');
+    if (!ahora[x.emp] || k > ahora[x.emp]) ahora[x.emp] = k;
+  });
+  Object.keys(ahora).forEach(e => {
+    const k = ahora[e];
+    if (previo && (!ult[e] || k > ult[e]) && k.slice(0, 7) >= lim) {
+      try { enviarAhora_(e, 'Nómina nueva', 'Ya tienes en la app tu nómina ' + (k.length > 7 ? 'extra de ' : 'de ') + nombreMes_(k.slice(0, 7)) + '.'); } catch (err) { console.warn(err); }
+    }
+    ult[e] = k;
+  });
+  pr.setProperty('NOM_ULTIMAS', JSON.stringify(ult));
+}
+const MESES_LARGOS_ = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function nombreMes_(m) { return MESES_LARGOS_[Number(m.slice(5, 7)) - 1] + ' ' + m.slice(0, 4); }
+
+/** La caché admite textos de unos 100 KB: los largos se guardan en trozos. */
+function cacheGuardar_(clave, texto, seg) {
+  const c = CacheService.getScriptCache(), T = 40000, n = Math.max(1, Math.ceil(texto.length / T)), o = {};
+  for (let i = 0; i < n; i++) o[clave + ':' + i] = texto.slice(i * T, (i + 1) * T);
+  o[clave] = String(n);
+  c.putAll(o, seg);
+}
+function cacheLeer_(clave) {
+  const c = CacheService.getScriptCache(), n = Number(c.get(clave) || 0);
+  if (!n) return null;
+  const ks = []; for (let i = 0; i < n; i++) ks.push(clave + ':' + i);
+  const v = c.getAll(ks); let t = '';
+  for (const k of ks) { if (v[k] == null) return null; t += v[k]; }
+  return t;
+}
+function cacheBorrar_(clave) { CacheService.getScriptCache().remove(clave); }
 
 /* ================= Registro horario ================= */
 
@@ -622,6 +823,7 @@ function descargar_(archivo) {
 
 /** Cada hora: si en GitHub hay otra versión, la instala sin hacer nada a mano. */
 function comprobarActualizacion() {
+  try { avisarNominasNuevas_(); } catch (e) { console.warn('Nóminas: ' + e.message); }
   let codigo;
   try { codigo = descargar_('Codigo.gs'); } catch (e) { console.warn(e.message); return; }
   const m = codigo.match(/const VERSION_SERVIDOR = '([^']+)'/);
@@ -661,19 +863,35 @@ function aplicarActualizacion_(codigo) {
   const permisosNuevos = scopes(man.source) !== scopes(manifiesto);
   js.source = codigo; man.source = manifiesto;
   apiScript_('put', '/content', { files: archivos });
+  // con permisos nuevos no se publica todavía (la app dejaría de funcionar hasta autorizar): lo hace "autorizar"
+  if (permisosNuevos) { PropertiesService.getScriptProperties().setProperty('PUBLICAR_PENDIENTE', '1'); return { permisosNuevos, version: null, implementaciones: 0 }; }
+  return Object.assign({ permisosNuevos }, publicarVersion_());
+}
+function publicarVersion_() {
   const v = apiScript_('post', '/versions', { description: 'Actualización automática ' + hoy_() });
   const dep = (apiScript_('get', '/deployments').deployments || []).filter(d =>
     d.deploymentConfig && d.deploymentConfig.versionNumber && (d.entryPoints || []).some(e => e.entryPointType === 'WEB_APP'));
   dep.forEach(d => apiScript_('put', '/deployments/' + d.deploymentId, { deploymentConfig: {
     scriptId: ScriptApp.getScriptId(), versionNumber: v.versionNumber, manifestFileName: 'appsscript',
     description: 'Versión ' + v.versionNumber + ' (automática)' } }));
-  return { permisosNuevos, version: v.versionNumber, implementaciones: dep.length };
+  return { version: v.versionNumber, implementaciones: dep.length };
 }
 
 /** Ejecútala una vez desde el editor (Ejecutar) para dar todos los permisos, también el de enviar avisos. */
 function autorizar() {
   ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
   UrlFetchApp.fetch('https://www.google.com');
+  const pr = PropertiesService.getScriptProperties();
+  try {
+    const n = indiceNominas_(true).length;
+    pr.setProperty('NOMINAS_LISTO', '1');
+    avisarNominasNuevas_();   // deja apuntadas las que ya hay, para avisar solo de las nuevas
+    console.log('Nóminas: ' + n + ' PDF encontrados en la carpeta.');
+  } catch (e) { console.warn('No puedo leer la carpeta de nóminas: ' + e.message); }
+  // si una actualización trajo permisos nuevos, ahora que están dados se publica
+  if (pr.getProperty('PUBLICAR_PENDIENTE')) {
+    try { publicarVersion_(); pr.deleteProperty('PUBLICAR_PENDIENTE'); console.log('Versión nueva publicada.'); } catch (e) { console.warn('No se ha podido publicar: ' + e.message); }
+  }
   console.log('Permisos correctos.');
 }
 
