@@ -20,7 +20,7 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-16 a';
+const VERSION_SERVIDOR = '2026-11-16 b';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
@@ -521,6 +521,7 @@ const ADMIN_ = {
     const lista = nominasAsignadas_(indiceNominas_(!!p.forzar), empleadosNominas_());
     return { limite: limiteNominas_(), actualizado: CacheService.getScriptCache().get('nomhora') || '',
       lista: lista.map(x => ({ id: x.id, mes: x.mes, extra: x.extra, nombre: x.nombre, emp: x.emp, dudoso: x.dudoso })),
+      apartados: nombresApartados_(),
       alias: empleadosNominas_().filter(e => e.alias.length).map(e => ({ emp: e.id, alias: e.alias })),
       peticiones: peticionesNominas_().slice(-60).reverse() };
   },
@@ -538,6 +539,14 @@ const ADMIN_ = {
     const quedan = p.quitar ? alias.filter(a => claveNombre_(a) !== claveNombre_(nombre)) : alias.concat(alias.some(a => claveNombre_(a) === claveNombre_(nombre)) ? [] : [nombre]);
     if (!String(r.hoja.getRange(1, 11).getValue() || '').trim()) r.hoja.getRange(1, 11).setValue('Nombre en las nóminas');
     r.hoja.getRange(r.f.fila, 11).setValue(quedan.join(' | '));
+  },
+  /** Nombres que no entran en la app (ex-empleados, jubilaciones...): sus nóminas no las ve nadie y no se avisa de ellas. */
+  nominaApartar(ses, p) {
+    const nombre = texto_(p.nombre, 120), k = claveNombre_(nombre);
+    if (!k) throw new Error('Falta el nombre.');
+    const lista = nombresApartados_().filter(n => claveNombre_(n) !== k);
+    if (!p.quitar) lista.push(nombre);
+    PropertiesService.getScriptProperties().setProperty('NOM_APARTADOS', JSON.stringify(lista));
   },
   nominaAcceso(ses, p) {
     const r = buscar_(HOJA.snom, p.id), hasta = sumar_(hoy_(), NOMINAS.DIAS_ACCESO);
@@ -605,6 +614,7 @@ function nominasAsignadas_(indice, emps) {
   }));
   return indice.map(x => { const ids = (x.clave && mapa[x.clave]) || []; return Object.assign({}, x, { emp: ids.length === 1 ? ids[0] : null, dudoso: ids.length > 1 }); });
 }
+function nombresApartados_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NOM_APARTADOS') || '[]'); } catch (e) { return []; } }
 function nominasDe_(id) { return nominasAsignadas_(indiceNominas_(false), empleadosNominas_()).filter(x => x.emp === id); }
 function limiteNominas_() {
   const h = hoy_(); let y = Number(h.slice(0, 4)), m = Number(h.slice(5, 7)) - NOMINAS.MESES;

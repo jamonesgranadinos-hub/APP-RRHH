@@ -251,7 +251,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-16 a</p>
+<p class="version">Versión 2026-11-16 b</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="visor" id="visor" hidden role="dialog" aria-modal="true" aria-labelledby="visorTitulo">
   <div class="visor-barra"><strong id="visorTitulo">Nómina</strong>
@@ -910,6 +910,8 @@ document.addEventListener("click", ev=>{
     case "nomCompartir": compartirNomina(); break;
     case "nomEmp": vista.nomEmp = vista.nomEmp===id ? null : id; render(); break;
     case "nomQuitarAlias": nominaAccion("nominaAsignar",{emp:id, nombre:b.dataset.t, quitar:true},"Nombre quitado"); break;
+    case "nomApartar": nominaAccion("nominaApartar",{nombre:b.dataset.t},`${b.dataset.t}: apartado`); break;
+    case "nomRecuperar": nominaAccion("nominaApartar",{nombre:b.dataset.t, quitar:true},`${b.dataset.t}: vuelve a la lista`); break;
     case "nomAcceso": nominaAccion("nominaAcceso",{id},"Acceso dado. Le llega un aviso."); break;
     case "nomAtendida": nominaAccion("nominaAtendida",{id},"Petición marcada como atendida"); break;
   }
@@ -1168,7 +1170,7 @@ async function cargarNominas(forzar){
   finally{ if(NOM && NOM.quien===yo){ NOM.cargando=false; if(vista.modulo==="nominas" && vista.sesion && !hayAlgoEscrito()) render(); } }
 }
 async function nominaAccion(accion, datos, mensaje){
-  try{ await api(accion, datos); toast(mensaje); if(accion!=="pedirNominas" && vista.sesion.rol==="admin") refrescarPorDetras(0); await cargarNominas(); return true; }
+  try{ await api(accion, datos); toast(mensaje); if(accion!=="pedirNominas" && vista.sesion.rol==="admin") refrescarPorDetras(0); await cargarNominas(); if(vista.modulo==="nominas") render(); return true; }
   catch(e){ toast(e.message||"No se ha podido guardar"); return false; }
 }
 const mayus = t => t.charAt(0).toUpperCase() + t.slice(1);
@@ -1222,7 +1224,9 @@ function vNominasAdmin(){
   const N = NOM && NOM.datos;
   if(!N) return cabeceraNom() + esperaNom();
   const sin = {}, ids = new Set(S.empleados.map(e=>e.id));
-  N.lista.filter(x=>!x.emp).forEach(x=>{ const k=x.nombre||"(sin nombre)"; (sin[k]=sin[k]||{nombre:x.nombre, dudoso:x.dudoso, items:[]}).items.push(x); });
+  const apartados = N.apartados||[], claveN = t => String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]+/g," ").trim().split(" ").filter(Boolean).sort().join(" ");
+  const esApartado = new Set(apartados.map(claveN));
+  N.lista.filter(x=>!x.emp && !esApartado.has(claveN(x.nombre))).forEach(x=>{ const k=x.nombre||"(sin nombre)"; (sin[k]=sin[k]||{nombre:x.nombre, dudoso:x.dudoso, items:[]}).items.push(x); });
   const grupos = Object.values(sin).sort((a,b)=>b.items.length-a.items.length);
   const pend = N.peticiones.filter(p=>p.estado==="pendiente"), hechas = N.peticiones.filter(p=>p.estado!=="pendiente");
   const deEmp = eid => N.lista.filter(x=>x.emp===eid);
@@ -1244,7 +1248,8 @@ function vNominasAdmin(){
   ${grupos.length?`<section><h2>Nóminas sin dueño <span class="globo" style="vertical-align:middle">${grupos.length}</span></h2>
     <p class="muted small" style="margin-bottom:10px">Su nombre no coincide exacto con nadie de la plantilla, así que <strong>nadie las ve</strong>. Si son de un empleado (por ejemplo, su nombre está escrito distinto), asígnaselas y se le enseñarán también las de los próximos meses.</p>
     <ul class="lista">${grupos.map(g=>`<li><div class="q"><strong>${esc(g.nombre||"Archivo sin nombre de persona")}</strong><span class="muted small">${g.items.length} ${g.items.length===1?"nómina":"nóminas"}: ${g.items.slice(0,4).map(x=>esc(tituloNom(x))).join(", ")}${g.items.length>4?"…":""}${g.dudoso?" · coincide con dos empleados":""}</span></div>
-      ${g.nombre?`<form data-f="nomAsignar" data-nombre="${esc(g.nombre)}" class="acciones" style="flex:1 1 260px"><select name="emp" style="flex:1;min-width:0"><option value="">¿De quién es?</option>${activos().map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("")}</select><button class="btn chico">Asignar</button></form>`:""}</li>`).join("")}</ul></section>`:""}
+      ${g.nombre?`<form data-f="nomAsignar" data-nombre="${esc(g.nombre)}" class="acciones" style="flex:1 1 260px"><select name="emp" style="flex:1;min-width:0"><option value="" selected>¿De quién es?</option>${activos().map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join("")}</select><button class="btn chico">Asignar</button></form><button class="enlace" data-a="nomApartar" data-t="${esc(g.nombre)}" style="flex-basis:100%;text-align:left">No entra en la app (ya no trabaja, jubilación…)</button>`:""}</li>`).join("")}</ul></section>`:""}
+  ${apartados.length?`<section><details><summary class="enlace">Nombres que no entran en la app (${apartados.length})</summary><p class="muted small" style="margin:10px 0">Sus nóminas no las ve nadie y no te salen como aviso.</p><ul class="lista">${apartados.map(a=>`<li style="align-items:center"><div class="q"><strong>${esc(a)}</strong></div><button class="enlace" data-a="nomRecuperar" data-t="${esc(a)}">Volver a mostrar</button></li>`).join("")}</ul></details></section>`:""}
   <section><h2>Por empleado</h2>
     <div style="overflow-x:auto"><table class="tabla"><thead><tr><th>Empleado</th><th>Última nómina</th><th class="num">Últimos 12 meses</th></tr></thead><tbody>${filas}</tbody></table></div>
     <p class="muted small" style="margin-top:8px">Toca un empleado para ver sus nóminas.</p></section>
