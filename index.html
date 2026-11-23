@@ -212,6 +212,9 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
 .fichar[disabled]{opacity:.6}
 .estado-fichaje{margin:14px 0 6px;font-size:18px}
 .opciones{display:grid;gap:10px;margin-top:6px}
+.campo[hidden]{display:none}
+.opciones-fila{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.opciones-fila .opcion{align-items:center}
 .opcion{display:flex;gap:12px;align-items:flex-start;cursor:pointer;padding:12px 14px;border:1.5px solid var(--linea);border-radius:var(--r);background:var(--papel)}
 .opcion:has(input:checked){border-color:var(--pino);background:var(--pino-claro)}
 .opcion input{width:22px;height:22px;margin:2px 0 0;accent-color:var(--pino);flex:none}
@@ -251,7 +254,7 @@ input:disabled{background:#EDEEF4;color:var(--pizarra)}
   <div id="sesion"></div>
 </div></header>
 <main id="app"></main>
-<p class="version">Versión 2026-11-16 b</p>
+<p class="version">Versión 2026-11-23 a</p>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="visor" id="visor" hidden role="dialog" aria-modal="true" aria-labelledby="visorTitulo">
   <div class="visor-barra"><strong id="visorTitulo">Nómina</strong>
@@ -558,7 +561,7 @@ function tFicha(id){
   const fijos=vs.filter(v=>v.origen==="admin"), pedidas=vs.filter(v=>v.origen!=="admin");
   const DIAS_FIJOS=s.fijosObj, inicio=ANIO===ANIO_INICIO;
   const ex=S.extras.filter(x=>x.emp===id && (x.anio||2027)===ANIO), au=S.aus.filter(a=>a.emp===id).sort((a,b)=>b.desde.localeCompare(a.desde));
-  const sf=vista.sim; const c=explicar(sf.fdesde,sf.fhasta,false);
+  const sf=vista.sim; const c=explicar(sf.fdesde, vista.fmedio?sf.fdesde:sf.fhasta, !!vista.fmedio, vista.fmedio);
   return `<button class="enlace volver" data-a="volver">← Todos los empleados</button>
   <h2 style="font-size:28px">${esc(e.nombre)}</h2><p class="muted">${e.dni} · ${e.pinCambiado?"Ya ha elegido su PIN":`Todavía usa el PIN provisional ${PIN_PROV}`}</p>
   ${e.activo===false?`<div class="aviso mal" style="margin:12px 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><span>Dejó la empresa el ${fl(e.salida)} de ${e.salida.slice(0,4)}. Ya no puede entrar en la app.</span><button class="btn sec chico" data-a="readmitir" data-id="${e.id}">Volver a darle de alta</button></div>`:""}
@@ -571,9 +574,13 @@ function tFicha(id){
       <form data-f="inicialUno" data-id="${id}" style="margin-top:14px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <label class="campo" style="width:140px"><span>Días</span><input type="number" name="dias" step="0.5" min="0" max="60" value="${S.inicial[id]??""}" required></label>
         <button class="btn">Guardar</button></form></div>`:`<div class="bloque"><h3>Días fijos (${n(s.fijos)} de ${DIAS_FIJOS})</h3>
+      <div class="seg" role="group" aria-label="Día completo o medio día" style="margin-top:12px">
+      <button type="button" data-a="fmedio" data-v="" aria-pressed="${!vista.fmedio}">Días completos</button>
+      <button type="button" data-a="fmedio" data-v="mañana" aria-pressed="${vista.fmedio==="mañana"}">Medio día mañana</button>
+      <button type="button" data-a="fmedio" data-v="tarde" aria-pressed="${vista.fmedio==="tarde"}">Medio día tarde</button></div>
       <form data-f="fijo" data-id="${id}" style="margin-top:14px"><div class="fila">
-        <label class="campo"><span>Desde</span><input type="date" name="fdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sf.fdesde||""}" data-sim required></label>
-        <label class="campo"><span>Hasta</span><input type="date" name="fhasta" min="${sf.fdesde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sf.fhasta||""}" data-sim></label></div>
+        <label class="campo"><span>${vista.fmedio?"Día":"Desde"}</span><input type="date" name="fdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" value="${sf.fdesde||""}" data-sim required></label>
+        ${vista.fmedio?"":`<label class="campo"><span>Hasta</span><input type="date" name="fhasta" min="${sf.fdesde||ANIO+"-01-01"}" max="${ANIO}-12-31" value="${sf.fhasta||""}" data-sim></label>`}</div>
         <div class="calc">${c.error?`<div class="aviso mal">${c.error}</div>`:c.texto?`<div class="aviso ${s.fijos+c.dias>DIAS_FIJOS?"info":"ok"}">${c.texto}${s.fijos+c.dias>DIAS_FIJOS?` Con esto pasaría de los ${DIAS_FIJOS} fijos (${n(s.fijos+c.dias)}).`:""}</div>`:""}</div>
         <button class="btn" style="margin-top:12px" ${(!c.dias||c.error)?"disabled":""}>Asignar días fijos</button></form>
       <ul class="lista" style="margin-top:16px">${fijos.map(v=>lineaVac(v,`<button class="enlace rojo" data-a="quitarVac" data-id="${v.id}">Quitar</button>`)).join("")||`<li class="vacio">Sin días fijos asignados.</li>`}</ul>
@@ -671,9 +678,15 @@ function tAusencias(){
 function tDarDias(){
   return `<p class="muted">Da el mismo día o periodo de vacaciones a varias personas a la vez, por ejemplo un puente o un cierre de la empresa.</p>
   <form data-f="darDias" style="margin-top:18px">
-    <div class="bloque"><h2>1. Fechas</h2><div class="fila">
-      <label class="campo"><span>Desde</span><input type="date" name="vdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" required></label>
-      <label class="campo"><span>Hasta</span><input type="date" name="vhasta" min="${ANIO}-01-01" max="${ANIO}-12-31"></label></div>
+    <div class="bloque"><h2>1. Fechas</h2>
+      <div class="opciones opciones-fila" role="radiogroup" aria-label="Día completo o medio día" style="margin-bottom:14px">
+        <label class="opcion"><input type="radio" name="jornada" value="" checked><span><strong>Día completo o varios</strong></span></label>
+        <label class="opcion"><input type="radio" name="jornada" value="mañana"><span><strong>Medio día · mañana</strong></span></label>
+        <label class="opcion"><input type="radio" name="jornada" value="tarde"><span><strong>Medio día · tarde</strong></span></label>
+      </div>
+      <div class="fila">
+      <label class="campo"><span id="etqVdesde">Desde</span><input type="date" name="vdesde" min="${ANIO}-01-01" max="${ANIO}-12-31" required></label>
+      <label class="campo" id="campoVhasta"><span>Hasta</span><input type="date" name="vhasta" min="${ANIO}-01-01" max="${ANIO}-12-31"></label></div>
       <div class="calc" id="calcVarios"><span class="muted small">Si es un solo día, deja "Hasta" vacío.</span></div></div>
     <div class="bloque" style="margin-top:18px"><h2>2. ¿Se descuenta de sus vacaciones?</h2>
       <div class="opciones">
@@ -872,6 +885,7 @@ document.addEventListener("click", ev=>{
     case "pedirSalida": vista.confirmSalida=id; render(); break;
     case "cancelarSalida": vista.confirmSalida=null; render(); break;
     case "readmitir": hacer("readmitir",{emp:id},`${nom(id)} vuelve a estar en la plantilla`); break;
+    case "fmedio": vista.fmedio=b.dataset.v||null; vista.sim={fdesde:vista.sim.fdesde}; render(); break;
     case "pmedio": vista.pmedio=b.dataset.v||null; vista.sim={pdesde:vista.sim.pdesde}; render(); break;
     case "mes": vista.mes=b.dataset.v; render(); break;
     case "cerrarBaja": vista.cerrando=id; render(); break;
@@ -920,7 +934,11 @@ document.addEventListener("keydown", ev=>{ if(ev.key==="Escape" && visorAbierto(
 document.addEventListener("change", ev=>{
   const t=ev.target;
   if(t.matches("[data-sim]")){ vista.sim[t.name]=t.value; if(t.name==="desde"&&vista.sim.hasta&&vista.sim.hasta<t.value) vista.sim.hasta=t.value; if(t.name==="fdesde"&&vista.sim.fhasta&&vista.sim.fhasta<t.value) vista.sim.fhasta=t.value; if(t.name==="pdesde"&&vista.sim.phasta&&vista.sim.phasta<t.value) vista.sim.phasta=t.value; rerenderConFoco(t.name); }
-  if(t.name==="vdesde"||t.name==="vhasta"){ const f=t.form, de=f.vdesde.value, ha=f.vhasta.value||de; if(t.name==="vdesde") f.vhasta.min=de; const c=explicar(de,ha,false); document.getElementById("calcVarios").innerHTML = c.error?`<div class="aviso mal">${c.error}</div>`:c.texto?`<div class="aviso ok">${c.texto}</div>`:""; }
+  if(t.name==="vdesde"||t.name==="vhasta"||(t.name==="jornada"&&t.form&&t.form.dataset.f==="darDias")){
+    const f=t.form, franja=f.jornada.value, medio=!!franja, de=f.vdesde.value, ha=medio?de:(f.vhasta.value||de);
+    if(t.name==="vdesde") f.vhasta.min=de;
+    document.getElementById("campoVhasta").hidden=medio; document.getElementById("etqVdesde").textContent=medio?"Día":"Desde"; if(medio) f.vhasta.value="";
+    const c=explicar(de,ha,medio,franja); document.getElementById("calcVarios").innerHTML = c.error?`<div class="aviso mal">${c.error}</div>`:c.texto?`<div class="aviso ok">${c.texto}</div>`:`<span class="muted small">${medio?"Elige el día.":'Si es un solo día, deja "Hasta" vacío.'}</span>`; }
   if(t.name==="abierta"){ const h=t.form.querySelector("[name=hasta]"); h.disabled=t.checked; h.required=!t.checked; if(t.checked) h.value=""; }
   if(t.matches("[data-a=filtroAus]")){ vista.filtroAus=t.value; render(); }
 });
@@ -973,8 +991,8 @@ document.addEventListener("submit", async ev=>{
   }
   if(tipo==="rechazar"){ vista.rechazando=null; hacer("rechazar",{id:f.dataset.id, motivo:d.m},"Solicitud rechazada"); return; }
   if(tipo==="fijo"){
-    const id=f.dataset.id, desde=d.fdesde, hasta=d.fhasta||d.fdesde, c=explicar(desde,hasta,false); if(c.error||!c.dias) return;
-    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio:false, origen:"admin"},"Días fijos asignados")) { vista.sim={}; render(); }
+    const id=f.dataset.id, medio=!!vista.fmedio, desde=d.fdesde, hasta=medio?d.fdesde:(d.fhasta||d.fdesde), c=explicar(desde,hasta,medio,vista.fmedio); if(c.error||!c.dias) return;
+    if(await hacer("vacacionesAprobadas",{emp:id, desde, hasta, medio, franja:vista.fmedio, origen:"admin"},medio?"Medio día fijo asignado":"Días fijos asignados")) { vista.sim={}; render(); }
     return;
   }
   if(tipo==="extra"){ hacer("extra",{emp:f.dataset.id, anio:ANIO, dias:d.dias, motivo:d.motivo},"Días extra añadidos"); return; }
@@ -1006,14 +1024,14 @@ document.addEventListener("submit", async ev=>{
     return;
   }
   if(tipo==="darDias"){
-    const fd=new FormData(f), emps=fd.getAll("emp"), desde=d.vdesde, hasta=d.vhasta||d.vdesde;
-    const c=explicar(desde,hasta,false); if(c.error){ err("errDar",c.error); return; }
+    const fd=new FormData(f), emps=fd.getAll("emp"), franja=d.jornada||null, medio=!!franja, desde=d.vdesde, hasta=medio?d.vdesde:(d.vhasta||d.vdesde);
+    const c=explicar(desde,hasta,medio,franja); if(c.error){ err("errDar",c.error); return; }
     if(!emps.length){ err("errDar","Marca al menos a una persona."); return; }
     try{
-      const j = await api("vacacionesVarios",{emps, desde, hasta, tipo:d.tipo, conEstado:true});
+      const j = await api("vacacionesVarios",{emps, desde, hasta, medio, franja, tipo:d.tipo, conEstado:true});
       if(j.datos) aplicarEstado(j.datos); else await recargar();
       render();
-      toast(`Días dados a ${j.creadas} ${j.creadas===1?"persona":"personas"}${j.saltados.length?`. No se han dado a ${j.saltados.join(", ")} porque ${j.saltados.length===1?"ya tenía":"ya tenían"} algo esos días`:""}`);
+      toast(`${medio?"Medio día dado":"Días dados"} a ${j.creadas} ${j.creadas===1?"persona":"personas"}${j.saltados.length?`. No se han dado a ${j.saltados.join(", ")} porque ${j.saltados.length===1?"ya tenía":"ya tenían"} algo esos días`:""}`);
     }catch(e2){ err("errDar", e2.message); }
     return;
   }

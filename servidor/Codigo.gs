@@ -20,7 +20,7 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-16 b';
+const VERSION_SERVIDOR = '2026-11-23 a';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
@@ -433,18 +433,19 @@ const ADMIN_ = {
   },
   /** Da el mismo periodo de vacaciones a varios empleados a la vez (puentes, cierres...). */
   vacacionesVarios(ses, p) {
-    const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = fechaValida_(p.hasta || p.desde);
-    const dias = calcularDias_(desde, hasta, false, D.festivos);
+    const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = p.medio ? desde : fechaValida_(p.hasta || p.desde);
+    const franja = p.medio ? (p.franja === 'tarde' ? 'tarde' : 'mañana') : null;
+    const dias = calcularDias_(desde, hasta, !!p.medio, D.festivos);
     const origen = ['admin', 'dada', 'regalo'].indexOf(p.tipo) >= 0 ? p.tipo : null;
     if (!origen) throw new Error('Elige si se descuenta o es un día regalado.');
     const emps = (p.emps || []).filter(id => D.empleados.some(e => e.id === id && e.activo));
     if (!emps.length) throw new Error('Elige al menos un empleado.');
     const filas = [], saltados = [];
     emps.forEach(id => {
-      if (solapa_(D, id, desde, hasta, null)) { saltados.push(nombreCorto_(id)); return; }
-      filas.push(filaVac_({ id: nuevoId_('V'), emp: id, desde, hasta, medio: false, dias, origen, estado: 'aprobada' }));
+      if (solapa_(D, id, desde, hasta, franja)) { saltados.push(nombreCorto_(id)); return; }
+      filas.push(filaVac_({ id: nuevoId_('V'), emp: id, desde, hasta, medio: !!p.medio, franja, dias, origen, estado: 'aprobada' }));
       avisar_(id, origen === 'regalo' ? 'Día libre' : 'Te han dado vacaciones',
-        (origen === 'regalo' ? 'Libras ' : 'Tienes vacaciones ') + periodo_(desde, hasta, null) + (origen === 'regalo' ? '. No se descuenta de tus días.' : '.'));
+        (origen === 'regalo' ? 'Libras ' : 'Tienes vacaciones ') + periodo_(desde, hasta, franja) + (origen === 'regalo' ? '. No se descuenta de tus días.' : '.'));
     });
     if (filas.length) { const h = hoja_(HOJA.vac); h.getRange(h.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas); }
     return { creadas: filas.length, saltados };
