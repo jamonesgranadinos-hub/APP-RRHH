@@ -20,7 +20,7 @@ const CFG = {
 const FIREBASE_PROYECTO = 'rrhh-jamones-granadinos';
 
 // Versión de este código. La hoja se actualiza sola cuando en GitHub hay una versión distinta.
-const VERSION_SERVIDOR = '2026-11-23 a';
+const VERSION_SERVIDOR = '2026-11-24 a';
 const REPO_RAW = 'https://raw.githubusercontent.com/jamonesgranadinos-hub/app-rrhh/main/servidor/';
 
 const inv = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
@@ -283,6 +283,42 @@ function filaVac_(v) {
     v.dias, ORIGEN[v.origen], ESTADO[v.estado], hoy_(), v.estado === 'pendiente' ? '' : hoy_(), ''];
 }
 function crearVac_(v) { hoja_(HOJA.vac).appendRow(filaVac_(v)); }
+/** Guarda unas vacaciones aprobadas repartidas entre años si hace falta. Devuelve los días que pasan al año siguiente. */
+function crearVacRepartida_(D, v) {
+  const trozos = repartirAnios_(D, v), a = v.anio || Number(v.desde.slice(0, 4));
+  trozos.forEach((t, i) => crearVac_(Object.assign(t, { id: i ? nuevoId_('V') : v.id })));
+  return trozos.filter(t => t.anio > a).reduce((s, t) => s + t.dias, 0);
+}
+function laborablesLista_(desde, hasta, festivos) {
+  const fs = new Set(festivos.map(f => f.fecha)), out = [];
+  for (let s = desde; s <= hasta; s = sumar_(s, 1)) { const w = new Date(s + 'T00:00:00Z').getUTCDay(); if (w > 0 && w < 6 && !fs.has(s)) out.push(s); }
+  return out;
+}
+/**
+ * Un año nunca se queda en negativo: si al empleado ya no le quedan días de ese año, lo que falta
+ * cuenta como días adelantados del año siguiente (las mismas fechas, apuntadas al año siguiente).
+ * Si le queda medio día, ese día se parte: la mañana para este año y la tarde para el siguiente.
+ */
+function repartirAnios_(D, v) {
+  const a = v.anio || Number(v.desde.slice(0, 4));
+  const base = Object.assign({}, v, { anio: a });
+  if (v.origen === 'regalo' || !(v.dias > 0)) return [base];
+  if (a === CFG.ANIO_INICIO && D.inicial[v.emp] == null) return [base];   // sin los días de arranque cargados no se sabe cuántos quedan
+  const s = saldo_(D, v.emp, a), quedan = Math.max(0, s.total - s.fijos - s.pedidos);
+  if (quedan >= v.dias) return [base];
+  if (quedan <= 0 || v.medio) return [Object.assign({}, base, { anio: a + 1 })];
+  const L = laborablesLista_(v.desde, v.hasta, D.festivos);
+  const k = Math.floor(quedan), partir = quedan - k >= 0.5, trozos = [];
+  if (k > 0) trozos.push(Object.assign({}, base, { hasta: L[k - 1], medio: false, franja: null, dias: k }));
+  if (partir) {
+    trozos.push(Object.assign({}, base, { desde: L[k], hasta: L[k], medio: true, franja: 'mañana', dias: 0.5 }));
+    trozos.push(Object.assign({}, base, { anio: a + 1, desde: L[k], hasta: L[k], medio: true, franja: 'tarde', dias: 0.5 }));
+  }
+  const resto = L.slice(k + (partir ? 1 : 0));
+  if (resto.length) trozos.push(Object.assign({}, base, { anio: a + 1, desde: resto[0], hasta: v.hasta, medio: false, franja: null, dias: resto.length }));
+  return trozos;
+}
+const textoAdelanto_ = (n, a) => n ? ' (' + (n === 0.5 ? 'medio día cuenta' : n === 1 ? '1 día cuenta' : String(n).replace('.', ',') + ' días cuentan') + ' para ' + a + ' porque ya no le quedan de ' + (a - 1) + ')' : '';
 
 function crearAus_(a) {
   const t = a.tipo;
@@ -414,9 +450,23 @@ const ADMIN_ = {
   },
   registroBorrar(ses, p) { borrarFila_(HOJA.reg, p.id); },
   aprobar(ses, p) {
-    const r = buscar_(HOJA.vac, p.id);
-    r.hoja.getRange(r.f.fila, 10, 1, 3).setValues([[ESTADO.aprobada, r.f[10], hoy_()]]);
-    avisar_(r.f[2], 'Vacaciones aprobadas', 'Te han aprobado: ' + periodo_(fecha_(r.f[4]), fecha_(r.f[5]), r.f[6] ? String(r.f[6]).toLowerCase() : null));
+    const r = buscar_(HOJA.vac, p.id), D = leerTodo_();
+    const v = D.vac.find(x => x.id === String(p.id));
+    const trozos = v ? repartirAnios_(D, Object.assign({}, v, { estado: 'aprobada' })) : [];
+    const pasan = trozos.filter(t => t.anio > v.anio).reduce((s, t) => s + t.dias, 0);
+    if (trozos.length <= 1) {
+      // sin repartir (o todo pasa al año siguiente): se cambia la misma fila
+      if (trozos.length && trozos[0].anio !== v.anio) r.hoja.getRange(r.f.fila, 2).setValue(trozos[0].anio);
+      r.hoja.getRange(r.f.fila, 10, 1, 3).setValues([[ESTADO.aprobada, r.f[10], hoy_()]]);
+    } else {
+      // la solicitud se parte: la primera parte se queda en su fila y el resto va en filas nuevas
+      const filas = trozos.map((t, i) => { const f = filaVac_(Object.assign(t, { id: i ? nuevoId_('V') : v.id })); f[10] = r.f[10]; return f; });
+      r.hoja.getRange(r.f.fila, 1, 1, filas[0].length).setValues([filas[0]]);
+      const h = hoja_(HOJA.vac);
+      h.getRange(h.getLastRow() + 1, 1, filas.length - 1, filas[0].length).setValues(filas.slice(1));
+    }
+    avisar_(r.f[2], 'Vacaciones aprobadas', 'Te han aprobado: ' + periodo_(fecha_(r.f[4]), fecha_(r.f[5]), r.f[6] ? String(r.f[6]).toLowerCase() : null) + textoAdelanto_(pasan, (v ? v.anio : 0) + 1).replace('le quedan', 'te quedaban'));
+    return { pasan, anio: v ? v.anio + 1 : null };
   },
   rechazar(ses, p) {
     const r = buscar_(HOJA.vac, p.id), motivo = texto_(p.motivo);
@@ -440,15 +490,20 @@ const ADMIN_ = {
     if (!origen) throw new Error('Elige si se descuenta o es un día regalado.');
     const emps = (p.emps || []).filter(id => D.empleados.some(e => e.id === id && e.activo));
     if (!emps.length) throw new Error('Elige al menos un empleado.');
-    const filas = [], saltados = [];
+    const filas = [], saltados = [], adelantados = [], anio = Number(desde.slice(0, 4));
+    let creadas = 0;
     emps.forEach(id => {
       if (solapa_(D, id, desde, hasta, franja)) { saltados.push(nombreCorto_(id)); return; }
-      filas.push(filaVac_({ id: nuevoId_('V'), emp: id, desde, hasta, medio: !!p.medio, franja, dias, origen, estado: 'aprobada' }));
+      const trozos = repartirAnios_(D, { emp: id, desde, hasta, medio: !!p.medio, franja, dias, origen, estado: 'aprobada' });
+      trozos.forEach(t => filas.push(filaVac_(Object.assign(t, { id: nuevoId_('V') }))));
+      creadas++;
+      const pasan = trozos.filter(t => t.anio > anio).reduce((s, t) => s + t.dias, 0);
+      if (pasan) adelantados.push(nombreCorto_(id));
       avisar_(id, origen === 'regalo' ? 'Día libre' : 'Te han dado vacaciones',
-        (origen === 'regalo' ? 'Libras ' : 'Tienes vacaciones ') + periodo_(desde, hasta, franja) + (origen === 'regalo' ? '. No se descuenta de tus días.' : '.'));
+        (origen === 'regalo' ? 'Libras ' : 'Tienes vacaciones ') + periodo_(desde, hasta, franja) + (origen === 'regalo' ? '. No se descuenta de tus días.' : textoAdelanto_(pasan, anio + 1).replace('le quedan', 'te quedaban') + '.'));
     });
     if (filas.length) { const h = hoja_(HOJA.vac); h.getRange(h.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas); }
-    return { creadas: filas.length, saltados };
+    return { creadas, saltados, adelantados, anioSiguiente: anio + 1 };
   },
   vacacionesAprobadas(ses, p) {   // días fijos o vacaciones aprobadas antes de la app
     const D = leerTodo_(), desde = fechaValida_(p.desde), hasta = p.medio ? desde : fechaValida_(p.hasta || p.desde);
@@ -459,8 +514,9 @@ const ADMIN_ = {
     // Días adelantados: fechas de un año que cuentan como vacaciones del año siguiente
     const anioFechas = Number(desde.slice(0, 4)), anio = Number(p.anio) || anioFechas;
     if (anio !== anioFechas && anio !== anioFechas + 1) throw new Error('Los días solo pueden contar para su año o para el siguiente.');
-    crearVac_({ id: nuevoId_('V'), anio, emp: p.emp, desde, hasta, medio: !!p.medio, franja, dias,
+    const pasan = crearVacRepartida_(D, { id: nuevoId_('V'), anio, emp: p.emp, desde, hasta, medio: !!p.medio, franja, dias,
       origen: p.origen === 'admin' ? 'admin' : 'previa', estado: 'aprobada' });
+    return { pasan, anio: anio + 1 };
   },
   quitarVac(ses, p) { borrarFila_(HOJA.vac, p.id); },
   extra(ses, p) {
